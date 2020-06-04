@@ -55,7 +55,14 @@ def encodeCategorical(allGrooves):
     # 3 - Open cymbals (open hihat, crash and extra cymbal
     # 4 - Toms (low mid and high)
     # this works. now need to make turn categorical into dummy for whole dataset the same.
+    categories = ['ko', 'r', 'c', 's', 'k', 't', 'kc', 'kot', 'o', 'sc', 'kcot',
+                  'ct', 'so', 'kco', 'co', 'kso', 'ks', 'kt', 'st', 'ksc', 'ksco',
+                  'sco', 'ksct', 'kct', 'kst', 'sct', 'ot', 'cot', 'ksot', 'kscot',
+                  'sot', 'scot']
+
     allCategorical = np.empty([allGrooves.shape[0],32], dtype='str')
+    oneHotGrooves = np.empty([allGrooves.shape[0],32,32])
+
     print(allCategorical.shape)
     for j in range(allGrooves.shape[0]):
         groove = np.ceil(allGrooves[j,:,:]).astype(int)
@@ -76,12 +83,19 @@ def encodeCategorical(allGrooves):
             if cat == '':
                 cat = 'r'
             grooveStr[i] = cat
-        allCategorical[j,:] = grooveStr
-    return allCategorical
+        #print(grooveStr)
+        #allCategorical[j,:] = grooveStr
+        oh = pd.get_dummies(grooveStr, columns=categories)
+        for col in categories:
+            if col not in oh.columns:
+                oh[col] = 0
+        print(j)
+        oneHotGrooves[j,:,:] = oh.to_numpy()
+    return oneHotGrooves
 
 for i in range(len(folders)):
     bundle = np.load(directory + "/" + folders[i] + "/Hits.npy")
-    print(folders[i])
+    #print(folders[i])
     shortBundle = np.zeros([bundle.shape[0],32,5])
     for j in range(bundle.shape[0]):
         shortBundle[j,:,:] = np.ceil(_groupGroove5KitParts(bundle[j,:,:]))
@@ -89,7 +103,13 @@ for i in range(len(folders)):
 
 #print(allGrooves.shape) # mnist is (60000, 28, 28) - 60000 training images, 28x28 matrix (of pixels)
 
-allCategorical = encodeCategorical(allGrooves)
+oneHotGrooves = encodeCategorical(allGrooves)
+
+print(oneHotGrooves)
+print(oneHotGrooves.shape)
+print(oneHotGrooves[1,:,:])
+
+#print(x)
 
 # s = allGrooves[10,:,:].flatten()
 # print(allGrooves[10,:,:])
@@ -107,9 +127,6 @@ allCategorical = encodeCategorical(allGrooves)
 # encoding
 #
 
-onehotGrooves = np.transpose(np.eye(1)[np.ceil(allGrooves[1,:,:]).astype(int)], (1,2,0))
-print(onehotGrooves.shape)
-
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.LSTM(64, return_sequences=False, dropout=0.1, recurrent_dropout=0.1))
 model.add(tf.keras.layers.Dense(64, activation='relu'))
@@ -123,7 +140,6 @@ model.compile(
 
 callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5),
              tf.keras.callbacks.ModelCheckpoint('../models/model.h5', save_best_only=True, save_weights_only=False)]
-
 
 
 #x_train = first bar, y_train = second bar
