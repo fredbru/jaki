@@ -8,7 +8,8 @@ sys.path.append("/home/fred/BFD/python/GrooveToolbox/")
 from Groove import *
 from LoadGrooveFromBFDPalette import *
 
-directory = "/home/fred/BFD/python/jaki/DATASET - All Numpy Files - 10part"
+directory = "/home/fred/BFD/python/jaki/DATASET - NOT SWUNG"
+np.set_printoptions(threshold=np.inf,precision=2)
 
 folders = os.listdir(directory)
 allhits = []
@@ -91,7 +92,7 @@ def encodeCategorical(allGrooves):
                 oh[col] = 0
         print(j)
         oneHotGrooves[j,:,:] = oh.to_numpy()
-    return oneHotGrooves
+    return np.random.shuffle(oneHotGrooves)
 
 for i in range(len(folders)):
     bundle = np.load(directory + "/" + folders[i] + "/Hits.npy")
@@ -103,11 +104,28 @@ for i in range(len(folders)):
 
 #print(allGrooves.shape) # mnist is (60000, 28, 28) - 60000 training images, 28x28 matrix (of pixels)
 
-oneHotGrooves = encodeCategorical(allGrooves)
+#oneHotGrooves = encodeCategorical(allGrooves)
+#np.save("One-Hot-Grooves-Nonswung.npy", oneHotGrooves)
+oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
 
-print(oneHotGrooves)
+
 print(oneHotGrooves.shape)
-print(oneHotGrooves[1,:,:])
+bar1 = oneHotGrooves[0:6000,0:16,:]
+bar2 = oneHotGrooves[0:6000,16:32,:]
+
+bar1Validate = oneHotGrooves[6000:6628,0:16,:]
+bar2Validate = oneHotGrooves[6000:6628,16:32,:]
+
+X_train = bar1
+y_train = bar2
+X_valid = bar1Validate
+y_valid = bar2Validate
+
+
+# for i in range(32):
+#     print(oneHotGrooves[1,i,:])
+
+#np.save("One-Hot-Grooves.npy", oneHotGrooves)
 
 #print(x)
 
@@ -126,25 +144,40 @@ print(oneHotGrooves[1,:,:])
 # embedding
 # encoding
 #
+hiddenDim = 24
 
-model = tf.keras.models.Sequential()
-model.add(tf.keras.layers.LSTM(64, return_sequences=False, dropout=0.1, recurrent_dropout=0.1))
-model.add(tf.keras.layers.Dense(64, activation='relu'))
-model.add(tf.keras.layers.Dropout(0.5))
+model = tf.keras.Sequential()
+model.add(tf.keras.layers.LSTM(200, input_shape=(16,32))) #encoder
+model.summary()
+
+model.add(tf.keras.layers.RepeatVector(16))
+model.add(tf.keras.layers.LSTM(16, return_sequences=True, input_shape=(200,))) #decoder
+model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(32, activation='softmax')))
+
+# model = tf.keras.models.Sequential()
+# model.add(tf.keras.layers.LSTM(16, return_sequences=True,batch_input_shape=(512,16,32)))
+# model.add(tf.keras.layers.Dense(64, activation='relu'))
+# model.add(tf.keras.layers.Dropout(0.5))
 
 #output
-model.add(tf.keras.layers.Dense(320, activation='softmax'))
+#model.add(tf.keras.layers.Dense(16, activation='softmax'))
+# model.add(tf.keras.layers.LSTM(16, return_sequences=True,
+#                                dropout=0.1, recurrent_dropout=0.1, input_shape=(64,)))
 
 model.compile(
     optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5),
+model.summary()
+
+callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=25),
              tf.keras.callbacks.ModelCheckpoint('../models/model.h5', save_best_only=True, save_weights_only=False)]
 
-
 #x_train = first bar, y_train = second bar
-# need to one-hot encode drum loops. then split bar by bar
 history = model.fit(X_train,  y_train,
-                    batch_size=512, epochs=15,
+                    batch_size=64, epochs=500,
                     callbacks=callbacks,
-                    validation_data=(X_valid, y_valid))
+                    validation_data=(bar1Validate,bar2Validate))
+
+prediction = model.predict(bar1[500:502,:,:])
+print("Prediction: ", prediction)
+print("Actual: ", bar2[500:502,:,:])
