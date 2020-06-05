@@ -47,6 +47,7 @@ def _groupGroove5KitParts(groove10Parts):
         [groove10Parts[:, openhihat] + groove10Parts[:, crash] + groove10Parts[:, extraCymbal]], 0, 1)
     groove5Parts[:, 4] = np.clip(
         [groove10Parts[:, lowTom] + groove10Parts[:, midTom] + groove10Parts[:, highTom]], 0, 1)
+    groove5Parts[groove5Parts < 0.3] = 0
     return groove5Parts
 
 def encodeCategorical(allGrooves):
@@ -104,19 +105,24 @@ for i in range(len(folders)):
         shortBundle[j,:,:] = np.ceil(_groupGroove5KitParts(bundle[j,:,:]))
     allGrooves = np.vstack((allGrooves,shortBundle))
 
-#print(allGrooves.shape) # mnist is (60000, 28, 28) - 60000 training images, 28x28 matrix (of pixels)
+rowsToDelete = [] #remove any weird loops with too many rests
+for i in range(allGrooves.shape[0]):
+    if np.count_nonzero(allGrooves[i,:,:]) < 9:
+        rowsToDelete.append(i)
+allGrooves = np.delete(allGrooves, rowsToDelete , axis=0)
 
-oneHotGrooves = encodeCategorical(allGrooves)
-np.save("One-Hot-Grooves-Nonswung.npy", oneHotGrooves)
-#oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
+
+#oneHotGrooves = encodeCategorical(allGrooves)
+#np.save("One-Hot-Grooves-Nonswung.npy", oneHotGrooves)
+oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
 
 
 print(oneHotGrooves.shape)
-bar1 = oneHotGrooves[0:6000,0:16,:]
-bar2 = oneHotGrooves[0:6000,16:32,:]
+bar1 = oneHotGrooves[0:5800,0:16,:]
+bar2 = oneHotGrooves[0:5800,16:32,:]
 
-bar1Validate = oneHotGrooves[6000:6628,0:16,:]
-bar2Validate = oneHotGrooves[6000:6628,16:32,:]
+bar1Validate = oneHotGrooves[5800:oneHotGrooves.shape[0],0:16,:]
+bar2Validate = oneHotGrooves[5800:oneHotGrooves.shape[0],16:32,:]
 
 X_train = bar1
 y_train = bar2
@@ -147,17 +153,13 @@ model.compile(
 
 model.summary()
 
-callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=25),
+callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20),
              tf.keras.callbacks.ModelCheckpoint('../models/model.h5', save_best_only=True, save_weights_only=False)]
 
 #x_train = first bar, y_train = second bar
 history = model.fit(X_train,  y_train,
-                    batch_size=64, epochs=500,
+                    batch_size=128, epochs=500,
                     callbacks=callbacks,
                     validation_data=(bar1Validate,bar2Validate))
-
-prediction = model.predict(bar1[500:502,:,:])
-print("Prediction: ", prediction)
-print("Actual: ", bar2[500:502,:,:])
 
 model.save("JAKI_Encoder_Decoder_5-6-20")
