@@ -91,8 +91,10 @@ def encodeCategorical(allGrooves):
             if col not in oh.columns:
                 oh[col] = 0
         print(j)
+        oh = oh.reindex(sorted(oh.columns), axis=1)
         oneHotGrooves[j,:,:] = oh.to_numpy()
-    return np.random.shuffle(oneHotGrooves)
+    np.random.shuffle(oneHotGrooves)
+    return oneHotGrooves
 
 for i in range(len(folders)):
     bundle = np.load(directory + "/" + folders[i] + "/Hits.npy")
@@ -104,9 +106,9 @@ for i in range(len(folders)):
 
 #print(allGrooves.shape) # mnist is (60000, 28, 28) - 60000 training images, 28x28 matrix (of pixels)
 
-#oneHotGrooves = encodeCategorical(allGrooves)
-#np.save("One-Hot-Grooves-Nonswung.npy", oneHotGrooves)
-oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
+oneHotGrooves = encodeCategorical(allGrooves)
+np.save("One-Hot-Grooves-Nonswung.npy", oneHotGrooves)
+#oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
 
 
 print(oneHotGrooves.shape)
@@ -121,30 +123,6 @@ y_train = bar2
 X_valid = bar1Validate
 y_valid = bar2Validate
 
-
-# for i in range(32):
-#     print(oneHotGrooves[1,i,:])
-
-#np.save("One-Hot-Grooves.npy", oneHotGrooves)
-
-#print(x)
-
-# s = allGrooves[10,:,:].flatten()
-# print(allGrooves[10,:,:])
-# oh = pd.get_dummies(encodeCategorical(allGrooves[10,:,:]))
-# print(oh)
-
-# model = tf.keras.models.Sequential([
-#     tf.keras.layers.Flatten(input_shape=(32,10)),
-#     tf.keras.layers.Dense(128,activation='relu'),
-#     tf.keras.layers.Dropout(0.2),
-#     tf.keras.layers.Dense(10)
-# ])
-
-# embedding
-# encoding
-#
-hiddenDim = 24
 
 model = tf.keras.Sequential()
 model.add(tf.keras.layers.LSTM(200, input_shape=(16,32))) #encoder
@@ -181,3 +159,5 @@ history = model.fit(X_train,  y_train,
 prediction = model.predict(bar1[500:502,:,:])
 print("Prediction: ", prediction)
 print("Actual: ", bar2[500:502,:,:])
+
+model.save("JAKI_Encoder_Decoder_5-6-20")
