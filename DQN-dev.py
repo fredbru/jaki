@@ -16,13 +16,18 @@ class DQN:
 
         self.gamma = 0.85
         self.epsilon = 1.0
-        self.epsilon_min = 0.01
+        self.epsilon_min = 0.001
         self.epsilon_decay = 0.995
         self.learning_rate = 0.005
         self.tau = .125
 
         self.probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
         print("LSTM prediction = ", convertOneHotToList(self.probabilities))
+        self.mostLikely = np.zeros([16,32])
+        for i in range(self.probabilities.shape[0]):
+            index = np.argmax(self.probabilities[:,i])
+            self.mostLikely[index] = 1.0
+
         self.model = self.create_model()
         self.target_model = self.create_model()
 
@@ -32,14 +37,13 @@ class DQN:
         model.add(Dense(16, input_shape=(32,)))
         model.add(Dense(24, input_shape=(16,32), activation="relu")) # does this need to be 512? size of state space? flatten model?
         model.add(Dense(48, activation="relu"))
-        model.add(Dense(24, activation="relu"))
         model.add(Dense(32)) #number of possible actions
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
         model.summary()
-        weights = model.get_weights()
-        weights[0] = self.probabilities.T
-        model.set_weights(weights)
+        #weights = model.get_weights()
+        #weights[0] = self.probabilities.T
+        #model.set_weights(weights)
         return model
 
     def act(self, state):
@@ -47,7 +51,6 @@ class DQN:
         self.epsilon = max(self.epsilon_min, self.epsilon)
         done = False
         if np.random.random() < self.epsilon:
-            # todo: action space is the set of all possible actions
             # actions are adding or removing any number of onsets
             action, actionIndex = self.getRandomAction()  # pick random action
         else:
@@ -61,17 +64,32 @@ class DQN:
         newState = np.copy(state)
         newState[actionIndex[0],:] = 0
         newState[actionIndex] = 1
-        reward = self.calculateSyncopation(newState) - self.calculateSyncopation(state)  # reward is difference in syncopation
-        if reward > 3.0:
+
+        reward = self.getReward(state,newState)
+
+        print(reward) ### 13/6 to do: integrate the LSTM fitness reward properly.
+        if reward > 5.0:
             done = True
-            print(reward)
+            #print(reward, self.epsilon)
         return newState, reward, done, action
+
+    def getReward(self, state, newState):
+        syncopationReward = self.calculateSyncopation(newState) - self.calculateSyncopation(state)
+        distancePenalty = np.sum(newState - self.mostLikely) / 40.0
+        reward = syncopationReward - distancePenalty
+        print(syncopationReward, distancePenalty)
+        return reward
 
     def getRandomAction(self):
         # make an array with a random 1 in it. this 1 corresponds to a change in a single value \for any position in the
         # loop state (for example setting a rest into a snare hit at position 5 etc).
+        # change actions to prioritize removing onsets more.
         actionArray = np.zeros([16, 32])
-        actionIndex = np.random.randint(16), np.random.randint(32)
+        # 50/50 chance of either make a rest or change a note
+        if np.random.randint(0,2) == 1:
+            actionIndex = np.random.randint(16), np.random.randint(32)
+        else:
+            actionIndex = np.random.randint(16), 22
         actionArray[actionIndex] = 1
         action = np.reshape(actionArray, (512))
         actionIndex = np.nonzero(actionArray)
@@ -103,7 +121,7 @@ class DQN:
     def replay(self): # need to refit this function to use new adapted reward calculation?
         # this is not training the target -  this is training self.model, using target estimated by
         # by target model
-        batch_size = 1024
+        batch_size = 2048
         if len(self.memory) < batch_size:
             return
 
