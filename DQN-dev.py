@@ -5,6 +5,7 @@ import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
+import random
 
 from collections import deque
 
@@ -16,17 +17,19 @@ class DQN:
 
         self.gamma = 0.85
         self.epsilon = 1.0
-        self.epsilon_min = 0.001
+        self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
         self.learning_rate = 0.005
         self.tau = .125
+        self.seedLoop = seedLoop
 
         self.probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
+        print("LSTM predictions ", convertOneHotToList(self.probabilities))
         print("LSTM prediction = ", convertOneHotToList(self.probabilities))
         self.mostLikely = np.zeros([16,32])
         for i in range(self.probabilities.shape[0]):
-            index = np.argmax(self.probabilities[:,i])
-            self.mostLikely[index] = 1.0
+            index = np.argmax(self.probabilities[i,:]) ### this bit isn't working! sets all values to c.
+            self.mostLikely[i,index] = 1.0
 
         self.model = self.create_model()
         self.target_model = self.create_model()
@@ -41,9 +44,9 @@ class DQN:
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
         model.summary()
-        #weights = model.get_weights()
-        #weights[0] = self.probabilities.T
-        #model.set_weights(weights)
+        weights = model.get_weights()
+        weights[0] = self.probabilities.T
+        model.set_weights(weights)
         return model
 
     def act(self, state):
@@ -57,27 +60,36 @@ class DQN:
             prediction = self.model.predict(state)
             actionIndex = np.unravel_index(np.argmax(prediction, axis=None), prediction.shape) # do predicted best action. add batch size
             action = np.zeros([16,32])
-            action[actionIndex] = 1
+            action[actionIndex[0],actionIndex[1]] = 1
             #actionArray = np.reshape(action, (16, 32))
 
         # Carry out action. problem - model output is 512 1D vector.
         newState = np.copy(state)
         newState[actionIndex[0],:] = 0
-        newState[actionIndex] = 1
+        newState[actionIndex[0],actionIndex[1]] = 1
 
         reward = self.getReward(state,newState)
 
-        print(reward) ### 13/6 to do: integrate the LSTM fitness reward properly.
+        #print(reward)
         if reward > 5.0:
             done = True
             #print(reward, self.epsilon)
         return newState, reward, done, action
 
     def getReward(self, state, newState):
-        syncopationReward = self.calculateSyncopation(newState) - self.calculateSyncopation(state)
-        distancePenalty = np.sum(newState - self.mostLikely) / 40.0
-        reward = syncopationReward - distancePenalty
-        print(syncopationReward, distancePenalty)
+        # reward calcualted as sum of complexity and similarity to probabilities.
+
+        syncopationReward = self.calculateSyncopation(newState) - self.calculateSyncopation(self.seedLoop)
+        distancePenalty = np.sum(np.abs(newState - self.mostLikely))/2.0
+        print("jaki ", convertOneHotToList(newState))
+        print("seed ", convertOneHotToList(self.seedLoop))
+        print("lstm ", convertOneHotToList(self.mostLikely))
+        densityDifference = self.calculateDensity(newState) - self.calculateDensity(self.seedLoop)
+        densityReward =  -(densityDifference - 5) # reward for being close to 5
+
+        reward = syncopationReward - distancePenalty #+ densityReward
+        print(syncopationReward, -distancePenalty, densityReward)
+        # print(densityReward, 'd')
         return reward
 
     def getRandomAction(self):
@@ -85,15 +97,47 @@ class DQN:
         # loop state (for example setting a rest into a snare hit at position 5 etc).
         # change actions to prioritize removing onsets more.
         actionArray = np.zeros([16, 32])
+
+        # exclude physically impossible hit combinations and rests
+        possibleHits = [0,3,4,5,8,9,10,11,12,15,18,19,20,21,23,24,27,28,30,31]
+
         # 50/50 chance of either make a rest or change a note
         if np.random.randint(0,2) == 1:
-            actionIndex = np.random.randint(16), np.random.randint(32)
+            actionIndex = np.random.randint(16), random.choice(possibleHits)
         else:
             actionIndex = np.random.randint(16), 22
-        actionArray[actionIndex] = 1
-        action = np.reshape(actionArray, (512))
+        actionArray[actionIndex[0],actionIndex[1]] = 1
         actionIndex = np.nonzero(actionArray)
+
         return actionArray, actionIndex
+
+    def calculateDensity(self, loop):
+        # calculate density, counting indexes of multiple coincident onsets and not counting rests
+        restIndex = [22]
+        density = 0
+        singleHitIndexes = [0,4,20,23,31]
+        doubleHitIndexes = [1,3,5,9,11,19,21,24,28,30]
+        tripleHitIndexes = [2,6,8,10,12,16,18,25,27,29]
+        quadrupleHitIndexes = [7,13,15,17,26]
+        quintupleHitIndex = [14]
+
+        for i in range(16):
+            hit = np.nonzero(loop[i,:])[0]
+
+            if hit in singleHitIndexes:
+                density+=1
+            if hit in doubleHitIndexes:
+                density+=2
+            if hit in tripleHitIndexes:
+                density+=3
+            if hit in quadrupleHitIndexes:
+                density+=4
+            if hit in quintupleHitIndex:
+                density+=5
+        return density / 2.0
+
+
+
 
     def calculateSyncopation(self, state):
         # calculate syncopation reward. should this be offset against original syncpation? so
@@ -101,16 +145,18 @@ class DQN:
         # test this against something
         # theoretical max is like 15 or something.
         # If this is too slow for training, could be a way to optimize?
+        # syncopation should be calculated against original loop. not previous state. act on the state. reward aganst the original
         metricalProfile = [5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1]
         syncopation = 0.0
-        state[:, 22] = 0.0  # set rests in one-hot vector to 0.
+        loop = np.copy(state)
+        loop[:, 22] = 0.0  # set rests in one-hot vector to 0.
         for i in range(16):
-            if 1 in state[i, :]:
-                if np.sum(state[(i + 1) % 16, :]) == 0.0 and metricalProfile[(i + 1) % 16] > metricalProfile[i]:
+            if 1 in loop[i, :]:
+                if np.sum(loop[(i + 1) % 16, :]) == 0.0 and metricalProfile[(i + 1) % 16] > metricalProfile[i]:
                     syncopation = float(syncopation + (
                         abs(metricalProfile[(i + 1) % 16] - metricalProfile[i])))
 
-                elif np.sum(state[(i + 2) % 16, :]) == 0.0 and metricalProfile[(i + 2) % 16] > metricalProfile[i]:
+                elif np.sum(loop[(i + 2) % 16, :]) == 0.0 and metricalProfile[(i + 2) % 16] > metricalProfile[i]:
                     syncopation = float(syncopation + (
                         abs(metricalProfile[(i + 2) % 16] - metricalProfile[i])))
         return syncopation
@@ -121,7 +167,7 @@ class DQN:
     def replay(self): # need to refit this function to use new adapted reward calculation?
         # this is not training the target -  this is training self.model, using target estimated by
         # by target model
-        batch_size = 2048
+        batch_size = 1024
         if len(self.memory) < batch_size:
             return
 
@@ -155,9 +201,9 @@ class DQN:
 
 def convertOneHotToList(groove):
     # convert one hot or probabilities matrix from LSTM model into a list format
-    columns = ['c ', 'co', 'cot', 'ct', 'k ', 'kc', 'kco', 'kcot', 'kct', 'ko', 'kot',
-               'ks', 'ksc', 'ksco', 'kscot', 'ksct', 'kso', 'ksot', 'kst', 'kt', 'o ',
-               'ot', '  ', 's ', 'sc', 'sco', 'scot', 'sct', 'so', 'sot', 'st', 't ']
+    columns = [' c ', 'co ', 'cot', 'ct ', ' k ', 'kc ', 'kco', 'kcot', 'kct', 'ko ', 'kot',
+               'ks ', 'ksc', 'ksco', 'kscot', 'ksct', 'kso', 'ksot', 'kst', 'kt ', ' o ',
+               'ot ', '---', ' s ', 'sc ', 'sco', 'scot', 'sct', 'so ', 'sot', 'st ', ' t ']
     grooveList = []
     for i in range(groove.shape[0]):
         index = np.argmax(groove[i, :])
@@ -173,8 +219,12 @@ trial_len = 1500
 
 oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
+print(oneBarGrooves.shape[0])
+# for x in range(6000):
+#     groove = oneBarGrooves[x,:,:]
+#     print(convertOneHotToList(groove))
 
-LSTM = load_model("JAKI_Encoder_Decoder_12-6-20")
+LSTM = load_model("JAKI_Encoder_Decoder_14-6-20_2")
 
 
 # updateTargetNetwork = 1000
@@ -182,7 +232,7 @@ LSTM = load_model("JAKI_Encoder_Decoder_12-6-20")
 steps = []
 for trial in range(trials):
     # reset environment to a random loop
-    seedLoop = oneBarGrooves[np.random.randint(0,6000),:,:]
+    seedLoop = oneBarGrooves[np.random.randint(0,6244),:,:]
     dqn_agent = DQN(LSTM, seedLoop)
 
     # print(LSTM.summary())
@@ -190,7 +240,7 @@ for trial in range(trials):
     # print('\n')
     # print(dqn_agent.model.layers[0].get_weights()[1].shape)
     # dqn_agent.model.layers[0].set_weights(LSTMProbability)
-    currentState = seedLoop
+    currentState = np.copy(seedLoop)
 
     for step in range(trial_len):
         newState, reward, done, action = dqn_agent.act(currentState) #todo: do the action
@@ -199,12 +249,13 @@ for trial in range(trials):
         dqn_agent.replay()  # internally iterates default (prediction) model
         dqn_agent.target_train()  # iterates target model
 
-        currentState = newState
+        currentState = np.copy(newState)
         if done:
-            print("1st", convertOneHotToList(seedLoop))
-            print("Gen", convertOneHotToList(currentState))
+            print("Seed Loop", convertOneHotToList(seedLoop))
+            print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
+            print("DQN  Loop", convertOneHotToList(currentState))
             break
-    if step >= 1499:
+    if step >= 199:
         print("Failed to complete in trial {}".format(trial))
         if step % 10 == 0:
             dqn_agent.save_model("trial-{}.model".format(trial))

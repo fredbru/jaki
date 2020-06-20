@@ -110,6 +110,7 @@ for i in range(allGrooves.shape[0]):
     if np.count_nonzero(allGrooves[i,:,:]) < 9:
         rowsToDelete.append(i)
 allGrooves = np.delete(allGrooves, rowsToDelete , axis=0)
+print(allGrooves.shape)
 
 
 #oneHotGrooves = encodeCategorical(allGrooves)
@@ -138,23 +139,12 @@ model.add(tf.keras.layers.RepeatVector(16))
 model.add(tf.keras.layers.LSTM(16, return_sequences=True, input_shape=(200,))) #decoder
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(32, activation='softmax')))
 
-# model = tf.keras.models.Sequential()
-# model.add(tf.keras.layers.LSTM(16, return_sequences=True,batch_input_shape=(512,16,32)))
-# model.add(tf.keras.layers.Dense(64, activation='relu'))
-# model.add(tf.keras.layers.Dropout(0.5))
-
-#output
-#model.add(tf.keras.layers.Dense(16, activation='softmax'))
-# model.add(tf.keras.layers.LSTM(16, return_sequences=True,
-#                                dropout=0.1, recurrent_dropout=0.1, input_shape=(64,)))
-
 model.compile(
     optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 model.summary()
 
-callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20),
-             tf.keras.callbacks.ModelCheckpoint('../models/model.h5', save_best_only=True, save_weights_only=False)]
+callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20)]
 
 #x_train = first bar, y_train = second bar
 history = model.fit(X_train,  y_train,
@@ -162,4 +152,4 @@ history = model.fit(X_train,  y_train,
                     callbacks=callbacks,
                     validation_data=(bar1Validate,bar2Validate))
 
-model.save("JAKI_Encoder_Decoder_5-6-20")
+model.save("JAKI_Encoder_Decoder_14-6-20_2")

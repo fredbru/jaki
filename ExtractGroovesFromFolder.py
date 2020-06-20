@@ -13,12 +13,16 @@ grooveCount = 0
 
 for name in files:
     hits, timing, tempo = getAllGroovesFromBFDPalette(name)
-    allhits.append(hits)
-    alltiming.append(timing)
-    alltempo.append(tempo)
+    print(len(hits))
+    print(hits[1].shape)
+    filename = name[:-8]
+    print(filename)
+    Folder = filename
+    os.mkdir(Folder)
+    np.save(Folder + "/" + "Hits.npy", hits)
+    np.save(Folder + "/" + "Timing.npy", timing)
+    np.save(Folder + "/" + "Tempo.npy", tempo)
+
     print(name, len(hits))
     grooveCount += len(hits)
 
-np.save(allhits, "Hits.npy")
-np.save(alltiming, "Timing.npy")
-np.save(alltempo, "Tempo.npy")
