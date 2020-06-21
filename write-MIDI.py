@@ -1,3 +1,5 @@
+# UNFINISHED. Generate drum loop variations from just LSTM and write to MIDI files.
+
 import numpy as np
 from tensorflow.keras.models import load_model
 import tensorflow as tf
@@ -19,8 +21,8 @@ def convertOneHotToList(groove):
 
 GMKeymap = {"kick": [35, 36], "snare": [37, 38, 40], "closed hihat": [42, 44], "open hihat": [46], "low tom": [41, 43, 45]}
 
-#LSTM = load_model("JAKI_Encoder_Decoder_14-6-20")
-oneHotGrooves = np.load("One-Hot-Grooves-Nonswung-less-dense.npy")
+LSTM = load_model("JAKI_Encoder_Decoder_14-6-20")
+oneHotGrooves = np.load("One-Hot-Drum-Loops.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
 
 midiloop = pretty_midi.PrettyMIDI()

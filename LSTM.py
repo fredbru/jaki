@@ -1,3 +1,6 @@
+# Build and train LSTM part of jaki. If required also contains functions for one-hot encoding of drum loops from
+#  BFD format
+
 import sys
 import os
 import numpy as np
@@ -8,7 +11,7 @@ sys.path.append("/home/fred/BFD/python/GrooveToolbox/")
 from Groove import *
 from LoadGrooveFromBFDPalette import *
 
-directory = "/home/fred/BFD/python/jaki/DATASET - NOT SWUNG"
+directory = "/home/fred/BFD/python/jaki/DATASET"
 np.set_printoptions(threshold=np.inf,precision=2)
 
 folders = os.listdir(directory)
@@ -51,12 +54,13 @@ def _groupGroove5KitParts(groove10Parts):
     return groove5Parts
 
 def encodeCategorical(allGrooves):
+    # Encode BFD format grooves into
     # 0 - Kick
     # 1 - Snare
     # 2 - Closed cymbals (hihat and ride)
     # 3 - Open cymbals (open hihat, crash and extra cymbal
     # 4 - Toms (low mid and high)
-    # this works. now need to make turn categorical into dummy for whole dataset the same.
+
     categories = ['ko', 'r', 'c', 's', 'k', 't', 'kc', 'kot', 'o', 'sc', 'kcot',
                   'ct', 'so', 'kco', 'co', 'kso', 'ks', 'kt', 'st', 'ksc', 'ksco',
                   'sco', 'ksct', 'kct', 'kst', 'sct', 'ot', 'cot', 'ksot', 'kscot',
@@ -114,8 +118,8 @@ print(allGrooves.shape)
 
 
 #oneHotGrooves = encodeCategorical(allGrooves)
-#np.save("One-Hot-Grooves-Nonswung.npy", oneHotGrooves)
-oneHotGrooves = np.load("One-Hot-Grooves-Nonswung.npy")
+#np.save("One-Hot-Loops.npy", oneHotGrooves)
+oneHotGrooves = np.load("One-Hot-Drum-Loops.npy")
 
 
 print(oneHotGrooves.shape)

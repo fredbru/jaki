@@ -1,3 +1,5 @@
+# Generate 1 bar loop variations just from LSTM without reinforcement learning. Print to command line
+
 import sys
 import os
 import numpy as np
@@ -6,7 +8,6 @@ from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 import pandas as pd
 from collections import deque
-
 
 np.set_printoptions(threshold=np.inf,precision=2)
 
@@ -38,24 +39,11 @@ def convertOneHotToList(groove):
         grooveList.append(columns[index])
     return grooveList
 
-def convertListToMatrix(grooveList):
-    # convert list format groove into matrix for using groovetoolbox functions.
-    pass
-
-
 num_actions = 20
 
 eg = model.predict(bar1[0:2,:,:])
 
-#build rl model
-
-obsspace = eg
-actspace = eg
-
 print(convertOneHotToList(eg))
-
-
-
 
 # n = 0
 # for n in range(100):

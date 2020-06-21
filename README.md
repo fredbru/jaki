@@ -1,8 +1,6 @@
 # jaki
 
-Work in progress.
-
-jaki is and automatic drum loop generation system, built to generate controlled, musical variations on 1 bar 5-part drum loops.
+jaki is and automatic drum loop generation system, built to generate controlled, musical variations on 1 bar 5-part drum loops. Work in progress.
 
 The first part of the system uses a LSTM Encoder-Decoder architecture to learn to generate 1 bar loops based on a 1 bar seed loop. The system is fed with a dataset of 2 bar loops, and learns to predict the second bar from the first bar, thus generating continuations of a 1 bar loop that are idiomatic. This architecture is inspired by the RL Tuner algorithm developed by Magenta for melody generation. 
 
@@ -10,6 +8,6 @@ The output of the LSTM can often be either musically uninteresting, or sometimes
 
 To connect to the LSTM, the DQN reward function is calculated based on closeness to the probability distribution predicted by the LSTM. The weights of the DQN are also initialised to this, following the approach used by Magenta to connect a their Note RNN to a DQN.
 
-As of 20-6-20 the system currently works in a basic sense, but significant hyperparameter tuning is required. The LSTM model is mostly complete, but the DQN requires work, and a better look at the reward calculation in particular.
+As of 20-6-20 the system currently works in a basic sense, but significant hyperparameter tuning is required. The LSTM model is mostly complete, but the DQN requires work, and a better look at the reward calculation in particular. Other than that more work is needed to build in a proper way to input MIDI files for generation for actual use-cases, instead of just random selection of loops from .npy dataset.
 
 As further work I hope to look at the incorporation of more musical features to be used in the reward function, with adaptable weightings, aiming towards and interactive drum loop variation generator with higher-level musical controls. As part of developing the reinforcement learning aspect of jaki, I hope to look at more developed ways of integrating multiple reward functions and action selection, such as option-based frameworks and deep hierarchical reinforcement learning.
