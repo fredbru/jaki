@@ -22,7 +22,7 @@ class DQN:
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.005
+        self.learningRate = 0.005
         self.tau = .125
         self.seedLoop = seedLoop
 
@@ -35,7 +35,7 @@ class DQN:
             self.mostLikely[i,index] = 1.0
 
         self.model = self.create_model()
-        self.target_model = self.create_model()
+        self.targetModel = self.create_model()
 
     def create_model(self):
         model = Sequential()
@@ -45,7 +45,7 @@ class DQN:
         model.add(Dense(48, activation="relu"))
         model.add(Dense(32))
         model.compile(loss="mean_squared_error",
-                      optimizer=Adam(lr=self.learning_rate))
+                      optimizer=Adam(lr=self.learningRate))
         model.summary()
         weights = model.get_weights()
         weights[0] = self.probabilities.T
@@ -82,9 +82,9 @@ class DQN:
 
         syncopationReward = self.calculateSyncopation(newState) - self.calculateSyncopation(self.seedLoop)
         distancePenalty = np.sum(np.abs(newState - self.mostLikely))/2.0
-        # print("jaki ", convertOneHotToList(newState))
-        # print("seed ", convertOneHotToList(self.seedLoop))
-        # print("lstm ", convertOneHotToList(self.mostLikely))
+        print("jaki ", convertOneHotToList(newState))
+        print("seed ", convertOneHotToList(self.seedLoop))
+        print("lstm ", convertOneHotToList(self.mostLikely))
         densityDifference = self.calculateDensity(newState) - self.calculateDensity(self.seedLoop)
         densityReward =  -(densityDifference - 5) # reward for being close to 5
 
@@ -158,30 +158,33 @@ class DQN:
 
     def replay(self):
         # Train Q-network
-        batch_size = 1024
+        batch_size = 512
         if len(self.memory) < batch_size:
             return
 
         samples = random.sample(self.memory, batch_size)
 
+        # todo: optimize?
         for sample in samples:
             currentState, action, reward, newState, done = sample
-            target = self.target_model.predict(currentState)
+            target = self.targetModel.predict(currentState)
             if done:
                 target[0] = reward
             else:
-                Q_future = np.max(self.target_model.predict(newState))
+                Q_future = np.max(self.targetModel.predict(newState))
                 target[0] = reward + Q_future * self.gamma
 
             self.model.fit(currentState, target, epochs=1, verbose=0)
 
     def target_train(self):
         # Train target-Q network
+        # todo: optimize this?
         weights = self.model.get_weights()
-        target_weights = self.target_model.get_weights()
+        print(self.model.get_weights())
+        target_weights = self.targetModel.get_weights()
         for i in range(len(target_weights)):
             target_weights[i] = weights[i] * self.tau + target_weights[i] * (1 - self.tau)
-        self.target_model.set_weights(target_weights)
+        self.targetModel.set_weights(target_weights)
 
     def save_model(self, fn):
         self.model.save(fn)
@@ -216,16 +219,16 @@ steps = []
 for trial in range(trials):
     # reset environment to a random loop
     seedLoop = oneBarGrooves[np.random.randint(0,6244),:,:]
-    dqn_agent = DQN(LSTM, seedLoop)
+    dqnAgent = DQN(LSTM, seedLoop)
 
     currentState = np.copy(seedLoop)
 
     for step in range(trial_len):
-        newState, reward, done, action = dqn_agent.act(currentState) #todo: do the action
-        dqn_agent.remember(currentState, action, reward, newState, done)
+        newState, reward, done, action = dqnAgent.act(currentState) #todo: do the action
+        dqnAgent.remember(currentState, action, reward, newState, done)
 
-        dqn_agent.replay()  # internally iterates default (prediction) model
-        dqn_agent.target_train()  # iterates target model
+        dqnAgent.replay()  # internally iterates default (prediction) model
+        dqnAgent.target_train()  # iterates target model
 
         currentState = np.copy(newState)
         if done:
@@ -236,8 +239,8 @@ for trial in range(trials):
     if step >= 199:
         print("Failed to complete in trial {}".format(trial))
         if step % 10 == 0:
-            dqn_agent.save_model("trial-{}.model".format(trial))
+            dqnAgent.save_model("trial-{}.model".format(trial))
     else:
         print("Completed in {} trials".format(trial))
-        dqn_agent.save_model("success.model")
+        dqnAgent.save_model("success.model")
         break
