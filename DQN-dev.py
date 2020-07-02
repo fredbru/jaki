@@ -20,8 +20,8 @@ class DQN:
 
         self.gamma = 0.85
         self.epsilon = 1.0
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
+        self.epsilonMin = 0.01
+        self.epsilonDecay = 0.995
         self.learningRate = 0.005
         self.tau = .125
         self.seedLoop = seedLoop
@@ -53,8 +53,8 @@ class DQN:
         return model
 
     def act(self, state):
-        self.epsilon *= self.epsilon_decay
-        self.epsilon = max(self.epsilon_min, self.epsilon)
+        self.epsilon *= self.epsilonDecay
+        self.epsilon = max(self.epsilonMin, self.epsilon)
         done = False
         if np.random.random() < self.epsilon:
             # actions are adding or removing any number of onsets
@@ -180,7 +180,6 @@ class DQN:
         # Train target-Q network
         # todo: optimize this?
         weights = self.model.get_weights()
-        print(self.model.get_weights())
         target_weights = self.targetModel.get_weights()
         for i in range(len(target_weights)):
             target_weights[i] = weights[i] * self.tau + target_weights[i] * (1 - self.tau)
