@@ -6,6 +6,7 @@ from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 import random
+import time
 
 from collections import deque
 
@@ -40,7 +41,7 @@ class DQN:
     def create_model(self):
         model = Sequential()
         #state_shape = [16,32]
-        model.add(Dense(16, input_shape=(32,)))
+        model.add(Dense(16, input_shape=(16,32)))
         model.add(Dense(24, input_shape=(16,32), activation="relu"))
         model.add(Dense(48, activation="relu"))
         model.add(Dense(32))
@@ -60,15 +61,17 @@ class DQN:
             # actions are adding or removing any number of onsets
             action, actionIndex = self.getRandomAction()  # pick random action
         else:
-            prediction = self.model.predict(state)
+            prediction = self.model.predict(state) #output shape 16,32
+            print('shape', self.targetModel.predict(state).shape)
             actionIndex = np.unravel_index(np.argmax(prediction, axis=None), prediction.shape) # do predicted best action
-            action = np.zeros([16,32])
-            action[actionIndex[0],actionIndex[1]] = 1
+            actionIndex = actionIndex[1], actionIndex[2]
+            action = np.zeros([1,16,32])
+            action[0,actionIndex[0],actionIndex[1]] = 1
 
         # Carry out action. problem - model output is 512 1D vector.
         newState = np.copy(state)
-        newState[actionIndex[0],:] = 0
-        newState[actionIndex[0],actionIndex[1]] = 1
+        newState[0,actionIndex[0],:] = 0
+        newState[0,actionIndex[0],actionIndex[1]] = 1
 
         reward = self.getReward(state,newState)
 
@@ -80,12 +83,12 @@ class DQN:
         # Calculate reward as sum of complexity increase (syncopation+density) and similarity to probabilities.
         # todo: optimize weights, find a better way to combine features.
 
-        syncopationReward = self.calculateSyncopation(newState) - self.calculateSyncopation(self.seedLoop)
-        distancePenalty = np.sum(np.abs(newState - self.mostLikely))/2.0
-        print("jaki ", convertOneHotToList(newState))
-        print("seed ", convertOneHotToList(self.seedLoop))
-        print("lstm ", convertOneHotToList(self.mostLikely))
-        densityDifference = self.calculateDensity(newState) - self.calculateDensity(self.seedLoop)
+        syncopationReward = self.calculateSyncopation(newState[0,:,:]) - self.calculateSyncopation(self.seedLoop)
+        distancePenalty = np.sum(np.abs(newState[0,:,:] - self.mostLikely))/2.0
+        #print("jaki ", convertOneHotToList(newState))
+        #print("seed ", convertOneHotToList(self.seedLoop))
+        #print("lstm ", convertOneHotToList(self.mostLikely))
+        densityDifference = self.calculateDensity(newState[0,:,:]) - self.calculateDensity(self.seedLoop)
         densityReward =  -(densityDifference - 5) # reward for being close to 5
 
         reward = syncopationReward - distancePenalty + densityReward
@@ -134,6 +137,7 @@ class DQN:
                 density+=4
             if hit in quintupleHitIndex:
                 density+=5
+        end = time.time()
         return density / 2.0
 
     def calculateSyncopation(self, state):
@@ -158,23 +162,56 @@ class DQN:
 
     def replay(self):
         # Train Q-network
-        batch_size = 512
-        if len(self.memory) < batch_size:
+        batchSize = 128
+        if len(self.memory) < batchSize:
             return
 
-        samples = random.sample(self.memory, batch_size)
+        samples = random.sample(self.memory, batchSize)
 
-        # todo: optimize?
-        for sample in samples:
+        currentStates = np.zeros([batchSize,16,32])
+        actions = np.zeros([batchSize,16,32])
+        rewards = np.zeros([batchSize,1])
+        newStates = np.zeros([batchSize,16,32])
+        dones = np.zeros([batchSize,1])
+
+
+        for i in range(batchSize):
+            sample = samples[i]
             currentState, action, reward, newState, done = sample
-            target = self.targetModel.predict(currentState)
-            if done:
-                target[0] = reward
-            else:
-                Q_future = np.max(self.targetModel.predict(newState))
-                target[0] = reward + Q_future * self.gamma
+            currentStates[i,:,:] = currentState
+            actions[i,:,:] = action
+            rewards[i,0] = reward
+            newStates[i,:,:] = newState
+            dones[i,0] = done
 
-            self.model.fit(currentState, target, epochs=1, verbose=0)
+
+        start = time.time()
+
+        # todo: optimize? this is the problem bit
+        target = self.targetModel.predict(currentStates) #target is the q value?
+
+
+        Q_future = self.targetModel.predict(newStates,batch_size=batchSize)
+        print(Q_future)
+        target = rewards + Q_future * self.gamma
+
+        self.model.fit(currentStates, target, epochs=1, verbose=0)
+        doneIndexes = np.where(dones)
+        target[doneIndexes] = rewards[doneIndexes]
+        end = time.time()
+        print("Vectorized training time = ", end-start)
+
+
+        # for sample in samples:
+        #     #currentState, action, reward, newState, done = sample
+        #     target = self.targetModel.predict(currentState,batch_size=batchSize)
+        #     if done:
+        #         target[0] = reward
+        #     else:
+        #         Q_future = np.max(self.targetModel.predict(newState),batch_size=batchSize)
+        #         target[0] = reward + Q_future * self.gamma
+        #
+        #     self.model.fit(currentState, target, epochs=1, verbose=0)
 
     def target_train(self):
         # Train target-Q network
@@ -205,7 +242,7 @@ def convertOneHotToList(groove):
 oneHotGrooves = np.load("One-Hot-Drum-Loops.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
 
-LSTM = load_model("JAKI_Encoder_Decoder_14-6-20_2")
+LSTM = load_model("JAKI_Encoder_Decoder_29-6_5")
 
 gamma = 0.9
 epsilon = .95
@@ -213,17 +250,17 @@ epsilon = .95
 trials = 1000
 trial_len = 1500
 
-
 steps = []
 for trial in range(trials):
     # reset environment to a random loop
     seedLoop = oneBarGrooves[np.random.randint(0,6244),:,:]
     dqnAgent = DQN(LSTM, seedLoop)
 
-    currentState = np.copy(seedLoop)
+    currentState = np.copy(seedLoop).reshape(1,seedLoop.shape[0],seedLoop.shape[1])
 
     for step in range(trial_len):
         newState, reward, done, action = dqnAgent.act(currentState) #todo: do the action
+        # action shape = 16,32 size
         dqnAgent.remember(currentState, action, reward, newState, done)
 
         dqnAgent.replay()  # internally iterates default (prediction) model
@@ -231,9 +268,9 @@ for trial in range(trials):
 
         currentState = np.copy(newState)
         if done:
-            print("Seed Loop", convertOneHotToList(seedLoop))
-            print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
-            print("DQN  Loop", convertOneHotToList(currentState))
+            #print("Seed Loop", convertOneHotToList(seedLoop))
+            #print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
+            #print("DQN  Loop", convertOneHotToList(newState))
             break
     if step >= 199:
         print("Failed to complete in trial {}".format(trial))
