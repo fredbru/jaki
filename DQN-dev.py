@@ -22,7 +22,7 @@ class DQN:
         self.gamma = 0.85
         self.epsilon = 1.0
         self.epsilonMin = 0.01
-        self.epsilonDecay = 0.995
+        self.epsilonDecay = 0.999
         self.learningRate = 0.005
         self.tau = .125
         self.seedLoop = seedLoop
@@ -58,11 +58,11 @@ class DQN:
         self.epsilon = max(self.epsilonMin, self.epsilon)
         done = False
         if np.random.random() < self.epsilon:
+            print('random')
             # actions are adding or removing any number of onsets
             action, actionIndex = self.getRandomAction()  # pick random action
         else:
             prediction = self.model.predict(state) #output shape 16,32
-            print('shape', self.targetModel.predict(state).shape)
             actionIndex = np.unravel_index(np.argmax(prediction, axis=None), prediction.shape) # do predicted best action
             actionIndex = actionIndex[1], actionIndex[2]
             action = np.zeros([1,16,32])
@@ -85,13 +85,13 @@ class DQN:
 
         syncopationReward = self.calculateSyncopation(newState[0,:,:]) - self.calculateSyncopation(self.seedLoop)
         distancePenalty = np.sum(np.abs(newState[0,:,:] - self.mostLikely))/2.0
-        #print("jaki ", convertOneHotToList(newState))
-        #print("seed ", convertOneHotToList(self.seedLoop))
-        #print("lstm ", convertOneHotToList(self.mostLikely))
+        print("jaki ", convertOneHotToList(newState[0,:,:]))
+        print("seed ", convertOneHotToList(self.seedLoop))
+        print("lstm ", convertOneHotToList(self.mostLikely))
         densityDifference = self.calculateDensity(newState[0,:,:]) - self.calculateDensity(self.seedLoop)
         densityReward =  -(densityDifference - 5) # reward for being close to 5
 
-        reward = syncopationReward - distancePenalty + densityReward
+        reward = syncopationReward - distancePenalty #+ densityReward
         print(syncopationReward, -distancePenalty, densityReward)
         return reward
 
@@ -105,7 +105,7 @@ class DQN:
         possibleHits = [0,3,4,5,8,9,10,11,12,15,18,19,20,21,23,24,27,28,30,31]
 
         # 50/50 chance of either make a rest or change a note
-        if np.random.randint(0,2) == 1:
+        if np.random.randint(0,10) == 1:
             actionIndex = np.random.randint(16), random.choice(possibleHits)
         else:
             actionIndex = np.random.randint(16), 22
@@ -162,7 +162,7 @@ class DQN:
 
     def replay(self):
         # Train Q-network
-        batchSize = 128
+        batchSize = 256
         if len(self.memory) < batchSize:
             return
 
@@ -189,10 +189,6 @@ class DQN:
         target = self.targetModel.predict(currentStates) #target is the q value?
 
         Q_future = np.amax(self.targetModel.predict(newStates,batch_size=batchSize), axis=(1,2)).reshape(batchSize,1,1)
-        # I might have to do this per batch - need predicted future Q for every actio individaully
-        print(Q_future.shape)
-        print(rewards.shape)
-        print(target.shape)
 
         # actions array = 1 for action, 0 everywhere else. so sets all non action values to 0
         target = rewards.reshape(batchSize,1,1) + Q_future * self.gamma * actions
@@ -203,19 +199,7 @@ class DQN:
         # print(doneIndexes)
         # target = target * rewards
         end = time.time()
-        print("Vectorized training time = ", end-start)
-
-
-        # for sample in samples:
-        #     #currentState, action, reward, newState, done = sample
-        #     target = self.targetModel.predict(currentState,batch_size=batchSize)
-        #     if done:
-        #         target[0] = reward
-        #     else:
-        #         Q_future = np.max(self.targetModel.predict(newState),batch_size=batchSize)
-        #         target[0] = reward + Q_future * self.gamma
-        #
-        #     self.model.fit(currentState, target, epochs=1, verbose=0)
+        #print("Batch training time = ", end-start)
 
     def target_train(self):
         # Train target-Q network
@@ -272,9 +256,9 @@ for trial in range(trials):
 
         currentState = np.copy(newState)
         if done:
-            #print("Seed Loop", convertOneHotToList(seedLoop))
-            #print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
-            #print("DQN  Loop", convertOneHotToList(newState))
+            print("Seed Loop", convertOneHotToList(seedLoop))
+            print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
+            print("DQN  Loop", convertOneHotToList(newState[0,:,:]))
             break
     if step >= 199:
         print("Failed to complete in trial {}".format(trial))
