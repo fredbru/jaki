@@ -174,7 +174,6 @@ class DQN:
         newStates = np.zeros([batchSize,16,32])
         dones = np.zeros([batchSize,1])
 
-
         for i in range(batchSize):
             sample = samples[i]
             currentState, action, reward, newState, done = sample
@@ -186,18 +185,23 @@ class DQN:
 
 
         start = time.time()
-
         # todo: optimize? this is the problem bit
         target = self.targetModel.predict(currentStates) #target is the q value?
 
+        Q_future = np.amax(self.targetModel.predict(newStates,batch_size=batchSize), axis=(1,2)).reshape(batchSize,1,1)
+        # I might have to do this per batch - need predicted future Q for every actio individaully
+        print(Q_future.shape)
+        print(rewards.shape)
+        print(target.shape)
 
-        Q_future = self.targetModel.predict(newStates,batch_size=batchSize)
-        print(Q_future)
-        target = rewards + Q_future * self.gamma
+        # actions array = 1 for action, 0 everywhere else. so sets all non action values to 0
+        target = rewards.reshape(batchSize,1,1) + Q_future * self.gamma * actions
+        #target[actionIndex] = rewards + Q_future * self.gamma
 
         self.model.fit(currentStates, target, epochs=1, verbose=0)
-        doneIndexes = np.where(dones)
-        target[doneIndexes] = rewards[doneIndexes]
+        # doneIndexes = np.where(dones)
+        # print(doneIndexes)
+        # target = target * rewards
         end = time.time()
         print("Vectorized training time = ", end-start)
 
