@@ -37,6 +37,8 @@ class DQN:
 
         self.model = self.create_model()
         self.targetModel = self.create_model()
+        self.calculateKickDensity(seedLoop)
+        self.calculateSymmetry(seedLoop)
 
     def create_model(self):
         model = Sequential()
@@ -82,17 +84,18 @@ class DQN:
         # Calculate reward as sum of complexity increase (syncopation+density) and similarity to probabilities.
         # todo: optimize weights, find a better way to combine features.
 
-        syncopationReward = self.calculateSyncopation(newState[0,:,:]) - self.calculateSyncopation(self.seedLoop)
+        syncopationReward = self.calculateCombinedMonoSyncopation(newState[0,:,:]) -\
+                            self.calculateCombinedMonoSyncopation(self.seedLoop)
         distancePenalty = np.sum(np.abs(newState[0,:,:] - self.mostLikely))/2.0
-        print("jaki ", convertOneHotToList(newState[0,:,:]))
+        #print("jaki ", convertOneHotToList(newState[0,:,:]))
         print("seed ", convertOneHotToList(self.seedLoop))
-        print("lstm ", convertOneHotToList(self.mostLikely))
-        densityDifference = self.calculateDensity(newState[0,:,:]) - self.calculateDensity(self.seedLoop)
+        #print("lstm ", convertOneHotToList(self.mostLikely))
+        densityDifference = self.calculateOverallDensity(newState[0,:,:]) - self.calculateOverallDensity(self.seedLoop)
         densityReward =  -(densityDifference - 2) # reward for being close to 2
         # todo: change density reward to fixed number - not difference?
 
         reward = syncopationReward - distancePenalty + densityReward
-        print(syncopationReward, -distancePenalty, densityReward)
+        #print(syncopationReward, -distancePenalty, densityReward)
         return reward
 
     def getRandomAction(self):
@@ -114,7 +117,7 @@ class DQN:
 
         return actionArray, actionIndex
 
-    def calculateDensity(self, loop):
+    def calculateOverallDensity(self, loop):
         # calculate density, counting indexes of multiple coincident onsets and not counting rests
         restIndex = [22]
         density = 0
@@ -138,9 +141,44 @@ class DQN:
             if hit in quintupleHitIndex:
                 density+=5
         end = time.time()
-        return density / 2.0
+        return density
 
-    def calculateSyncopation(self, state):
+    def calculateKickDensity(self, loop):
+        # Count number of kicks vs length of bar
+        #s = time.time()
+        kickDensity = np.sum([loop[:,4],loop[:,5],loop[:,6],loop[:,7],loop[:,8],
+                              loop[:, 9],loop[:,10],loop[:,11],loop[:,12],loop[:,13],
+                              loop[:, 14],loop[:,15],loop[:,16],loop[:,17],loop[:,18],
+                              loop[:,19]]) / 16.0
+        #e = time.time()
+        #print(e-s)
+        return kickDensity
+
+    def calculateSnareDensity(self, loop):
+        # Count number of snares vs length of bar
+        snareDensity = np.sum([loop[:,11],loop[:,12],loop[:,13],loop[:,14],loop[:,15],
+                              loop[:, 16],loop[:,17],loop[:,18],loop[:,23],loop[:,24],
+                              loop[:, 25],loop[:,26],loop[:,27],loop[:,28],loop[:,29],
+                              loop[:,30]]) / 16.0
+        return snareDensity
+
+    def calculateCymbalDensity(self, loop):
+        # Count number of cymbal hits (closed or open) in loop vs length of bar
+        cymbalDensity = np.sum([loop[:,0],loop[:,1],loop[:,2],loop[:,3],loop[:,5],
+                              loop[:, 6],loop[:,7],loop[:,8],loop[:,9],loop[:,10],
+                              loop[:, 12],loop[:,13],loop[:,14],loop[:,15],loop[:,16],
+                              loop[:,17], loop[:, 20], loop[:,21], loop[:, 24], loop[:,25],
+                              loop[:,27],loop[:,28],loop[:,29]]) / 16.0
+        return cymbalDensity
+
+    def calculateTomDensity(self, loop):
+        tomDensity = np.sum([loop[:,2],loop[:,3],loop[:,7],loop[:,8],loop[:,10],
+                              loop[:,14],loop[:,15],loop[:,17],loop[:,18],loop[:,19],
+                              loop[:,21],loop[:,26],loop[:,27],loop[:,29],loop[:,30],
+                              loop[:,31]]) / 16.0
+        return tomDensity
+
+    def calculateCombinedMonoSyncopation(self, state):
         # calculate syncopation for 1 bar loop using Longuet-Higgins monophonic syncopation model
         metricalProfile = [5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1]
         syncopation = 0.0
@@ -156,6 +194,21 @@ class DQN:
                     syncopation = float(syncopation + (
                         abs(metricalProfile[(i + 2) % 16] - metricalProfile[i])))
         return syncopation
+
+    def calculateSymmetry(self, loop):
+        # Calculate symmetry for any number of parts.
+        # Defined as the the number of positions in the first and second halves that have the same value (rest or hit)
+        # divided by the total number of onsets in the pattern. As perfectly symmetrical pattern
+        # would have a symmetry of 1.0
+        # Doesn't deal with simultaneous onsets properly - still considers them different events
+        # NB unlike groove toolbox, counts rests occuring at the same place too.
+
+        part1,part2 = np.split(loop,2, axis=0)
+        index1 = np.nonzero(part1.flatten())
+        index2 = np.nonzero(part2.flatten())
+        symmetry = np.intersect1d(index1, index2).size * 2.0 / np.count_nonzero(loop)
+
+        return symmetry
 
     def remember(self, currentState, action, reward, newState, done):
         self.memory.append([currentState, action, reward, newState, done])
