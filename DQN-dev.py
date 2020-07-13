@@ -23,7 +23,7 @@ class DQN:
         self.epsilon = 1.0
         self.epsilonMin = 0.01
         self.epsilonDecay = 0.999
-        self.learningRate = 0.005
+        self.learningRate = 0.001
         self.tau = .125
         self.seedLoop = seedLoop
 
@@ -58,7 +58,6 @@ class DQN:
         self.epsilon = max(self.epsilonMin, self.epsilon)
         done = False
         if np.random.random() < self.epsilon:
-            print('random')
             # actions are adding or removing any number of onsets
             action, actionIndex = self.getRandomAction()  # pick random action
         else:
@@ -89,9 +88,10 @@ class DQN:
         print("seed ", convertOneHotToList(self.seedLoop))
         print("lstm ", convertOneHotToList(self.mostLikely))
         densityDifference = self.calculateDensity(newState[0,:,:]) - self.calculateDensity(self.seedLoop)
-        densityReward =  -(densityDifference - 5) # reward for being close to 5
+        densityReward =  -(densityDifference - 2) # reward for being close to 2
+        # todo: change density reward to fixed number - not difference?
 
-        reward = syncopationReward - distancePenalty #+ densityReward
+        reward = syncopationReward - distancePenalty + densityReward
         print(syncopationReward, -distancePenalty, densityReward)
         return reward
 
@@ -162,7 +162,7 @@ class DQN:
 
     def replay(self):
         # Train Q-network
-        batchSize = 256
+        batchSize = 1024
         if len(self.memory) < batchSize:
             return
 
@@ -230,7 +230,7 @@ def convertOneHotToList(groove):
 oneHotGrooves = np.load("One-Hot-Drum-Loops.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
 
-LSTM = load_model("JAKI_Encoder_Decoder_29-6_5")
+LSTM = load_model("JAKI_Encoder_Decoder_29-6_4")
 
 gamma = 0.9
 epsilon = .95
@@ -260,7 +260,7 @@ for trial in range(trials):
             print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
             print("DQN  Loop", convertOneHotToList(newState[0,:,:]))
             break
-    if step >= 199:
+    if step >= 500:
         print("Failed to complete in trial {}".format(trial))
         if step % 10 == 0:
             dqnAgent.save_model("trial-{}.model".format(trial))
