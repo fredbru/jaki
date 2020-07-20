@@ -17,30 +17,30 @@ class DQN:
         # Initialize Deep-Q reinforcement learning model. Consists of 2 networks of same architecture- Q-network to
         # choose next action and Target-Q to estimate expected future return.
 
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=10000)
 
         self.gamma = 0.85
         self.epsilon = 1.0
         self.epsilonMin = 0.01
-        self.epsilonDecay = 0.999
-        self.learningRate = 0.001
+        self.epsilonDecay = 0.995 #works best when its large?
+        self.learningRate = 0.005
         self.tau = .125
         self.seedLoop = seedLoop
 
         self.probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
-        print("LSTM predictions ", convertOneHotToList(self.probabilities))
-        print("LSTM prediction = ", convertOneHotToList(self.probabilities))
+        print("LSTM = ", convertOneHotToList(self.probabilities))
+        print("Seed = ", convertOneHotToList(self.seedLoop))
         self.mostLikely = np.zeros([16,32])
         for i in range(self.probabilities.shape[0]):
             index = np.argmax(self.probabilities[i,:])
             self.mostLikely[i,index] = 1.0
-
         self.model = self.create_model()
         self.targetModel = self.create_model()
         self.calculateKickDensity(seedLoop)
         self.calculateSymmetry(seedLoop)
 
     def create_model(self):
+        # todo: model weights not initialising to LSTM, instead to seed
         model = Sequential()
         #state_shape = [16,32]
         model.add(Dense(16, input_shape=(16,32)))
@@ -51,14 +51,17 @@ class DQN:
                       optimizer=Adam(lr=self.learningRate))
         model.summary()
         weights = model.get_weights()
-        weights[0] = self.probabilities.T
+        weights[0] = self.probabilities.T #wrong layer?
+        print(len(weights))
+        for i in range(8):
+            print('layer = ', i, weights[i].shape)
         model.set_weights(weights)
         return model
 
     def act(self, state):
         self.epsilon *= self.epsilonDecay
         self.epsilon = max(self.epsilonMin, self.epsilon)
-        done = False
+        done = 0
         if np.random.random() < self.epsilon:
             # actions are adding or removing any number of onsets
             action, actionIndex = self.getRandomAction()  # pick random action
@@ -75,9 +78,11 @@ class DQN:
         newState[0,actionIndex[0],actionIndex[1]] = 1
 
         reward = self.getReward(state,newState)
+        #print(reward)
 
-        if reward > 5.0:
-            done = True
+        if reward > 3.0:
+            print("Done!!! \n \n ")
+            done = 1
         return newState, reward, done, action
 
     def getReward(self, state, newState):
@@ -85,17 +90,18 @@ class DQN:
         # todo: optimize weights, find a better way to combine features.
 
         syncopationReward = self.calculateCombinedMonoSyncopation(newState[0,:,:]) -\
-                            self.calculateCombinedMonoSyncopation(self.seedLoop)
-        distancePenalty = np.sum(np.abs(newState[0,:,:] - self.mostLikely))/2.0
-        #print("jaki ", convertOneHotToList(newState[0,:,:]))
+                            self.calculateCombinedMonoSyncopation(self.seedLoop) * 2.0
+        distancePenalty = (np.sum(np.abs(newState[0,:,:] - self.probabilities)) /4.0) +1.0
+        print("jaki ", convertOneHotToList(newState[0,:,:]))
         print("seed ", convertOneHotToList(self.seedLoop))
-        #print("lstm ", convertOneHotToList(self.mostLikely))
+        print("lstm ", convertOneHotToList(self.mostLikely))
         densityDifference = self.calculateOverallDensity(newState[0,:,:]) - self.calculateOverallDensity(self.seedLoop)
-        densityReward =  -(densityDifference - 2) # reward for being close to 2
+        densityReward =  densityDifference /2.0
         # todo: change density reward to fixed number - not difference?
 
-        reward = syncopationReward - distancePenalty + densityReward
+        reward = syncopationReward - distancePenalty  + densityReward
         #print(syncopationReward, -distancePenalty, densityReward)
+        print('reward', reward,'syncopation', syncopationReward,'distance', distancePenalty, 'density', densityReward)
         return reward
 
     def getRandomAction(self):
@@ -207,7 +213,6 @@ class DQN:
         index1 = np.nonzero(part1.flatten())
         index2 = np.nonzero(part2.flatten())
         symmetry = np.intersect1d(index1, index2).size * 2.0 / np.count_nonzero(loop)
-
         return symmetry
 
     def remember(self, currentState, action, reward, newState, done):
@@ -215,7 +220,7 @@ class DQN:
 
     def replay(self):
         # Train Q-network
-        batchSize = 1024
+        batchSize = 128
         if len(self.memory) < batchSize:
             return
 
@@ -238,10 +243,11 @@ class DQN:
 
 
         start = time.time()
-        # todo: optimize? this is the problem bit
         target = self.targetModel.predict(currentStates) #target is the q value?
-
         Q_future = np.amax(self.targetModel.predict(newStates,batch_size=batchSize), axis=(1,2)).reshape(batchSize,1,1)
+        Q_future[np.argwhere(dones)] = 0.0
+        #print(dones.shape)
+        #print(np.argwhere(dones))
 
         # actions array = 1 for action, 0 everywhere else. so sets all non action values to 0
         target = rewards.reshape(batchSize,1,1) + Q_future * self.gamma * actions
@@ -280,24 +286,32 @@ def convertOneHotToList(groove):
         grooveList.append(columns[index])
     return grooveList
 
-oneHotGrooves = np.load("One-Hot-Drum-Loops.npy")
+oneHotGrooves = np.load("One-Hot-Loops-2nd-Bar-Checked.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
 
-LSTM = load_model("JAKI_Encoder_Decoder_29-6_4")
+LSTM = load_model("JAKI_Encoder_Decoder_20-7_1")
 
 gamma = 0.9
 epsilon = .95
 
 trials = 1000
-trial_len = 1500
+trial_len = 10
 
 steps = []
-for trial in range(trials):
-    # reset environment to a random loop
-    seedLoop = oneBarGrooves[np.random.randint(0,6244),:,:]
-    dqnAgent = DQN(LSTM, seedLoop)
+seedLoop = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
 
-    currentState = np.copy(seedLoop).reshape(1,seedLoop.shape[0],seedLoop.shape[1])
+probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
+LSTMmostLikely = np.zeros([16, 32])
+for i in range(probabilities.shape[0]):
+    index = np.argmax(probabilities[i, :])
+    LSTMmostLikely[i, index] = 1.0 # = input to model, LSTM prediction
+
+dqnAgent = DQN(LSTM, seedLoop)
+
+for trial in range(trials):
+    # reset environment
+    print("Trial {} \n".format(trial))
+    currentState = np.copy(LSTMmostLikely).reshape(1,LSTMmostLikely.shape[0],LSTMmostLikely.shape[1])
 
     for step in range(trial_len):
         newState, reward, done, action = dqnAgent.act(currentState) #todo: do the action
@@ -308,12 +322,12 @@ for trial in range(trials):
         dqnAgent.target_train()  # iterates target model
 
         currentState = np.copy(newState)
-        if done:
+        if done == 1:
             print("Seed Loop", convertOneHotToList(seedLoop))
             print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
             print("DQN  Loop", convertOneHotToList(newState[0,:,:]))
             break
-    if step >= 500:
+    if step >= 9:
         print("Failed to complete in trial {}".format(trial))
         if step % 10 == 0:
             dqnAgent.save_model("trial-{}.model".format(trial))
