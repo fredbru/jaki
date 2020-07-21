@@ -13,17 +13,17 @@ from collections import deque
 np.set_printoptions(threshold=np.inf,precision=2)
 
 class DQN:
-    def __init__(self, LSTM, seedLoop):
+    def __init__(self, LSTM, seedLoop, featureScores):
         # Initialize Deep-Q reinforcement learning model. Consists of 2 networks of same architecture- Q-network to
         # choose next action and Target-Q to estimate expected future return.
 
         self.memory = deque(maxlen=10000)
 
-        self.gamma = 0.85
+        self.gamma = 0.4
         self.epsilon = 1.0
         self.epsilonMin = 0.01
-        self.epsilonDecay = 0.995 #works best when its large?
-        self.learningRate = 0.005
+        self.epsilonDecay = 0.9999 #works best when its large?
+        self.learningRate = 0.0001
         self.tau = .125
         self.seedLoop = seedLoop
 
@@ -36,8 +36,8 @@ class DQN:
             self.mostLikely[i,index] = 1.0
         self.model = self.create_model()
         self.targetModel = self.create_model()
-        self.calculateKickDensity(seedLoop)
-        self.calculateSymmetry(seedLoop)
+        self.syncTarget, self.densityTarget, self.distanceTarget = featureScores
+
 
     def create_model(self):
         # todo: model weights not initialising to LSTM, instead to seed
@@ -52,13 +52,13 @@ class DQN:
         model.summary()
         weights = model.get_weights()
         weights[0] = self.probabilities.T #wrong layer?
-        print(len(weights))
-        for i in range(8):
-            print('layer = ', i, weights[i].shape)
+        #print(len(weights))
+        #for i in range(8):
+        #    print('layer = ', i, weights[i].shape)
         model.set_weights(weights)
         return model
 
-    def act(self, state):
+    def act(self, state, donethreshold):
         self.epsilon *= self.epsilonDecay
         self.epsilon = max(self.epsilonMin, self.epsilon)
         done = 0
@@ -80,28 +80,34 @@ class DQN:
         reward = self.getReward(state,newState)
         #print(reward)
 
-        if reward > 3.0:
+        if reward > donethreshold:
             print("Done!!! \n \n ")
             done = 1
+        print(donethreshold, trial)
         return newState, reward, done, action
 
     def getReward(self, state, newState):
         # Calculate reward as sum of complexity increase (syncopation+density) and similarity to probabilities.
         # todo: optimize weights, find a better way to combine features.
 
-        syncopationReward = self.calculateCombinedMonoSyncopation(newState[0,:,:]) -\
-                            self.calculateCombinedMonoSyncopation(self.seedLoop) * 2.0
-        distancePenalty = (np.sum(np.abs(newState[0,:,:] - self.probabilities)) /4.0) +1.0
+        syncopation = self.calculateCombinedMonoSyncopation(newState[0,:,:]) * 2.5
+        syncopationReward = ((12.0-abs(self.syncTarget - syncopation)) /12.0) # difference between target sync and actual sync
+        #todo: needs to be 1/ the difference! or inverse - so smaller the difference, bigger reward. atm bigger reward = bigger difference.
+        LSTMDistancePenalty = (np.sum(np.abs(newState[0,:,:] - self.probabilities)) /28.0)
+        #seedDistance = (np.sum(np.abs(newState[0,:,:] - self.seedLoop)) /4.0) +1.0
         print("jaki ", convertOneHotToList(newState[0,:,:]))
         print("seed ", convertOneHotToList(self.seedLoop))
         print("lstm ", convertOneHotToList(self.mostLikely))
-        densityDifference = self.calculateOverallDensity(newState[0,:,:]) - self.calculateOverallDensity(self.seedLoop)
-        densityReward =  densityDifference /2.0
+        density =  self.calculateOverallDensity(newState[0,:,:])
+        densityReward = ((22.0-abs(self.densityTarget - density)) /22.0)
+        print("ds",density, self.densityTarget)
+        print("ss",syncopation, self.syncTarget)
         # todo: change density reward to fixed number - not difference?
 
-        reward = syncopationReward - distancePenalty  + densityReward
+        reward = syncopationReward + densityReward - LSTMDistancePenalty
         #print(syncopationReward, -distancePenalty, densityReward)
-        print('reward', reward,'syncopation', syncopationReward,'distance', distancePenalty, 'density', densityReward)
+        print('reward', reward,'syncopation reward', syncopationReward,'LSTM Penalty', LSTMDistancePenalty,
+              'density reward', densityReward)
         return reward
 
     def getRandomAction(self):
@@ -220,7 +226,7 @@ class DQN:
 
     def replay(self):
         # Train Q-network
-        batchSize = 128
+        batchSize = 256
         if len(self.memory) < batchSize:
             return
 
@@ -295,10 +301,11 @@ gamma = 0.9
 epsilon = .95
 
 trials = 1000
-trial_len = 10
+trial_len = 50
 
 steps = []
-seedLoop = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
+#seedLoop = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
+seedLoop = oneBarGrooves[800,:,:]
 
 probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
 LSTMmostLikely = np.zeros([16, 32])
@@ -306,15 +313,34 @@ for i in range(probabilities.shape[0]):
     index = np.argmax(probabilities[i, :])
     LSTMmostLikely[i, index] = 1.0 # = input to model, LSTM prediction
 
-dqnAgent = DQN(LSTM, seedLoop)
+print("Syncopation Value (0-2):")
+SyncScore = int(input())
+print("Density Value (0-2):")
+DensityScore = int(input())
+#print("Distance Value (1-5):")
+#DistanceScore = int(input())
+DistanceScore = 0
 
+syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
+#syncMin = 0.0
+
+densityMax = 22.0
+densityMin = 4.0
+
+SyncScore = (SyncScore / 2.0 * syncMax) #scale to min and max reasonable feature values.
+DensityScore = (DensityScore / 2.0 * (densityMax-densityMin)) + 4.0
+featureScores = list([SyncScore, DensityScore, DistanceScore])
+dqnAgent = DQN(LSTM, seedLoop, featureScores)
+donethreshold = 1.3
 for trial in range(trials):
     # reset environment
     print("Trial {} \n".format(trial))
     currentState = np.copy(LSTMmostLikely).reshape(1,LSTMmostLikely.shape[0],LSTMmostLikely.shape[1])
+    if trial % 20 == 0:
+        donethreshold -= 0.1
 
     for step in range(trial_len):
-        newState, reward, done, action = dqnAgent.act(currentState) #todo: do the action
+        newState, reward, done, action = dqnAgent.act(currentState, donethreshold) #todo: do the action
         # action shape = 16,32 size
         dqnAgent.remember(currentState, action, reward, newState, done)
 
