@@ -19,11 +19,11 @@ class DQN:
 
         self.memory = deque(maxlen=10000)
 
-        self.gamma = 0.4
+        self.gamma = 0.2
         self.epsilon = 1.0
         self.epsilonMin = 0.01
-        self.epsilonDecay = 0.9999 #works best when its large?
-        self.learningRate = 0.0001
+        self.epsilonDecay = 0.99999 #works best when its large?
+        self.learningRate = 0.00001
         self.tau = .125
         self.seedLoop = seedLoop
 
@@ -90,23 +90,24 @@ class DQN:
         # Calculate reward as sum of complexity increase (syncopation+density) and similarity to probabilities.
         # todo: optimize weights, find a better way to combine features.
 
-        syncopation = self.calculateCombinedMonoSyncopation(newState[0,:,:]) * 2.5
+        syncopation = self.calculateCombinedMonoSyncopation(newState[0,:,:])
         syncopationReward = ((12.0-abs(self.syncTarget - syncopation)) /12.0) # difference between target sync and actual sync
         #todo: needs to be 1/ the difference! or inverse - so smaller the difference, bigger reward. atm bigger reward = bigger difference.
-        LSTMDistancePenalty = (np.sum(np.abs(newState[0,:,:] - self.probabilities)) /28.0)
+        LSTMDistancePenalty = (np.sum(np.abs(newState[0,:,:] - self.probabilities)) /40.0)
         #seedDistance = (np.sum(np.abs(newState[0,:,:] - self.seedLoop)) /4.0) +1.0
+        LSTMDistanceReward = np.sqrt(np.sqrt(1-LSTMDistancePenalty))
         print("jaki ", convertOneHotToList(newState[0,:,:]))
         print("seed ", convertOneHotToList(self.seedLoop))
         print("lstm ", convertOneHotToList(self.mostLikely))
         density =  self.calculateOverallDensity(newState[0,:,:])
-        densityReward = ((22.0-abs(self.densityTarget - density)) /22.0)
+        densityReward = ((24.0-abs(self.densityTarget - density)) /24.0)
         print("ds",density, self.densityTarget)
         print("ss",syncopation, self.syncTarget)
         # todo: change density reward to fixed number - not difference?
 
-        reward = syncopationReward + densityReward - LSTMDistancePenalty
+        reward = (syncopationReward + densityReward + LSTMDistanceReward)/ 3.0
         #print(syncopationReward, -distancePenalty, densityReward)
-        print('reward', reward,'syncopation reward', syncopationReward,'LSTM Penalty', LSTMDistancePenalty,
+        print('reward', reward,'syncopation reward', syncopationReward,'LSTM reward', LSTMDistanceReward,
               'density reward', densityReward)
         return reward
 
@@ -120,7 +121,7 @@ class DQN:
         possibleHits = [0,3,4,5,8,9,10,11,12,15,18,19,20,21,23,24,27,28,30,31]
 
         # 50/50 chance of either make a rest or change a note
-        if np.random.randint(0,10) == 1:
+        if np.random.randint(0,2) == 1:
             actionIndex = np.random.randint(16), random.choice(possibleHits)
         else:
             actionIndex = np.random.randint(16), 22
@@ -305,7 +306,7 @@ trial_len = 50
 
 steps = []
 #seedLoop = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
-seedLoop = oneBarGrooves[800,:,:]
+seedLoop = oneBarGrooves[1420,:,:]
 
 probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
 LSTMmostLikely = np.zeros([16, 32])
@@ -324,20 +325,20 @@ DistanceScore = 0
 syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
 #syncMin = 0.0
 
-densityMax = 22.0
+densityMax = 24.0
 densityMin = 4.0
 
 SyncScore = (SyncScore / 2.0 * syncMax) #scale to min and max reasonable feature values.
 DensityScore = (DensityScore / 2.0 * (densityMax-densityMin)) + 4.0
 featureScores = list([SyncScore, DensityScore, DistanceScore])
 dqnAgent = DQN(LSTM, seedLoop, featureScores)
-donethreshold = 1.3
+donethreshold = 0.9
 for trial in range(trials):
     # reset environment
     print("Trial {} \n".format(trial))
     currentState = np.copy(LSTMmostLikely).reshape(1,LSTMmostLikely.shape[0],LSTMmostLikely.shape[1])
     if trial % 20 == 0:
-        donethreshold -= 0.1
+        donethreshold -= 0.03
 
     for step in range(trial_len):
         newState, reward, done, action = dqnAgent.act(currentState, donethreshold) #todo: do the action
