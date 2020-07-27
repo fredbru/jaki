@@ -8,6 +8,7 @@ from keras.optimizers import Adam
 import random
 import time
 from scipy.signal import find_peaks
+import WriteLoopToMIDI
 
 from collections import deque
 
@@ -224,14 +225,15 @@ class DQN:
                         abs(metricalProfile[(i + 2) % 16] - metricalProfile[i])))
         return syncopation
 
-    def calculateSymmetry(self, loop):
+    def calculateSymmetry(self, state):
         # Calculate symmetry for any number of parts.
         # Defined as the the number of positions in the first and second halves that have the same value (rest or hit)
         # divided by the total number of onsets in the pattern. As perfectly symmetrical pattern
         # would have a symmetry of 1.0
         # Doesn't deal with simultaneous onsets properly - still considers them different events
         # NB unlike groove toolbox, counts rests occuring at the same place too.
-
+        loop = np.copy(state)
+        loop[:, 22] = 0.0
         part1,part2 = np.split(loop,2, axis=0)
         index1 = np.nonzero(part1.flatten())
         index2 = np.nonzero(part2.flatten())
@@ -309,6 +311,47 @@ def convertOneHotToList(groove):
         grooveList.append(columns[index])
     return grooveList
 
+def parseCommandLineInput():
+    print('Input Feature Scores (0 = Low, 1 = Mid, 2 = High, None = Ignore Feature)')
+    print("Syncopation Value (0-2):")
+    SyncInput = input()
+    print("Density Value (0-2):")
+    DensityInput = input()
+    print("Repetition Value (0-2):")
+    RepetitionInput = input()
+
+    repetitionMax = 1.0
+    repetitionMin = 0.0
+
+    syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
+    #syncMin = 0.0
+    featureCount = 1
+    if SyncInput.isdigit():
+        SyncTarget = (int(SyncInput) / 2.0 * syncMax)  # scale to min and max reasonable feature values.
+        featureCount+=1
+    else:
+        SyncTarget = None
+
+    densityMax = 24.0
+    densityMin = 4.0
+    if DensityInput.isdigit():
+        DensityTarget = (int(DensityInput) / 2.0 * (densityMax-densityMin)) + 4.0
+        featureCount+=1
+    else:
+        DensityTarget = None
+
+    if RepetitionInput.isdigit():
+        RepetitionTarget = int(RepetitionInput) / 2.0
+        featureCount+=1
+    else:
+        RepetitionTarget = None
+    featureTargets = list([SyncTarget, DensityTarget, RepetitionTarget])
+    print(featureTargets)
+
+    inputs = list([SyncInput, DensityInput, RepetitionInput])
+    return featureTargets, featureCount, inputs
+
+
 oneHotGrooves = np.load("One-Hot-Loops-2nd-Bar-Checked.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
 
@@ -322,54 +365,18 @@ trial_len = 50
 
 steps = []
 #seedLoop = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
-seedLoop = oneBarGrooves[3491,:,:]
+seedLoop = oneBarGrooves[1222,:,:]
 
 probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
 LSTMmostLikely = np.zeros([16, 32])
 for i in range(probabilities.shape[0]):
     index = np.argmax(probabilities[i, :])
     LSTMmostLikely[i, index] = 1.0 # = input to model, LSTM prediction
-print('Input Feature Scores (0 = Low, 1 = Mid, 2 = High, None = Ignore Feature)')
-print("Syncopation Value (0-2):")
-SyncInput = input()
-print("Density Value (0-2):")
-DensityInput = input()
-print("Repetition Value (0-2):")
-RepetitionInput = input()
 
+featureTargets, featureCount, inputs = parseCommandLineInput()
 
-
-repetitionMax = 1.0
-repetitionMin = 0.0
-
-syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
-#syncMin = 0.0
-featureCount = 1
-if SyncInput.isdigit():
-    SyncTarget = (int(SyncInput) / 2.0 * syncMax)  # scale to min and max reasonable feature values.
-    featureCount+=1
-else:
-    SyncTarget = None
-
-densityMax = 24.0
-densityMin = 4.0
-if DensityInput.isdigit():
-    DensityTarget = (int(DensityInput) / 2.0 * (densityMax-densityMin)) + 4.0
-    featureCount+=1
-else:
-    DensityTarget = None
-
-if RepetitionInput.isdigit():
-    RepetitionTarget = int(RepetitionInput) / 2.0
-    featureCount+=1
-else:
-    RepetitionTarget = None
-
-featureTargets = list([SyncTarget, DensityTarget, RepetitionTarget])
-print(featureTargets)
 dqnAgent = DQN(LSTM, seedLoop, featureTargets, featureCount)
 donethreshold = 0.9
-
 for trial in range(trials):
     # reset environment
     print("Trial {} \n".format(trial))
@@ -388,14 +395,21 @@ for trial in range(trials):
         if done == 1:
             print("Seed Loop", convertOneHotToList(seedLoop))
             print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
-            print('Syncopation ', SyncInput, 'Density ', DensityInput, 'Repetition ', RepetitionInput)
+            print('Syncopation ', inputs[0], 'Density ', inputs[1], 'Repetition ', inputs[2])
             print("DQN  Loop", convertOneHotToList(newState[0,:,:]))
             break
     if step >= 9:
         print("Failed to complete in trial {}".format(trial))
-        if step % 10 == 0:
-            dqnAgent.save_model("trial-{}.model".format(trial))
+        # if step % 10 == 0:
+        #     dqnAgent.save_model("trial-{}.model".format(trial))
     else:
         print("Completed in {} trials".format(trial))
         dqnAgent.save_model("success.model")
         break
+
+
+WriteLoopToMIDI.write_MIDI(('Loop3_DQN_''S' + inputs[0] + '_D' + inputs[1] + '_R' + inputs[2] +'.mid'),
+                           convertOneHotToList(newState[0,:,:]))
+WriteLoopToMIDI.write_MIDI(('Loop3_LSTM.mid'), convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
+WriteLoopToMIDI.write_MIDI(('Loop3_Seed.mid'), convertOneHotToList(seedLoop))
+
