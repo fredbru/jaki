@@ -7,6 +7,7 @@ from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 import random
 import time
+from scipy.signal import find_peaks
 
 from collections import deque
 
@@ -36,7 +37,7 @@ class DQN:
             self.mostLikely[i,index] = 1.0
         self.model = self.create_model()
         self.targetModel = self.create_model()
-        self.syncTarget, self.densityTarget, self.distanceTarget = featureScores
+        self.syncTarget, self.densityTarget, self.repetitionTarget = featureScores
 
 
     def create_model(self):
@@ -101,14 +102,20 @@ class DQN:
         print("lstm ", convertOneHotToList(self.mostLikely))
         density =  self.calculateOverallDensity(newState[0,:,:])
         densityReward = ((24.0-abs(self.densityTarget - density)) /24.0)
-        print("ds",density, self.densityTarget)
-        print("ss",syncopation, self.syncTarget)
+
+        repetition = self.calculateSymmetry(newState[0,:,:])
+        repetitionReward = 1.0 - abs(self.repetitionTarget - repetition)
+
+
+        print("d s",density, self.densityTarget)
+        print("s s",syncopation, self.syncTarget)
+        print("r s", repetition, self.repetitionTarget)
         # todo: change density reward to fixed number - not difference?
 
-        reward = (syncopationReward + densityReward + LSTMDistanceReward)/ 3.0
+        reward = (syncopationReward + densityReward + LSTMDistanceReward + repetitionReward)/ 4.0
         #print(syncopationReward, -distancePenalty, densityReward)
         print('reward', reward,'syncopation reward', syncopationReward,'LSTM reward', LSTMDistanceReward,
-              'density reward', densityReward)
+              'density reward', densityReward, 'repetition reward', repetitionReward)
         return reward
 
     def getRandomAction(self):
@@ -306,7 +313,7 @@ trial_len = 50
 
 steps = []
 #seedLoop = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
-seedLoop = oneBarGrooves[1420,:,:]
+seedLoop = oneBarGrooves[3491,:,:]
 
 probabilities = LSTM.predict(np.expand_dims(seedLoop, 0))[0]
 LSTMmostLikely = np.zeros([16, 32])
@@ -315,12 +322,15 @@ for i in range(probabilities.shape[0]):
     LSTMmostLikely[i, index] = 1.0 # = input to model, LSTM prediction
 
 print("Syncopation Value (0-2):")
-SyncScore = int(input())
+SyncInput = int(input())
 print("Density Value (0-2):")
-DensityScore = int(input())
-#print("Distance Value (1-5):")
-#DistanceScore = int(input())
+DensityInput = int(input())
+print("Repetition Value (0-2):")
+RepetitionInput = int(input())
 DistanceScore = 0
+
+repetitionMax = 1.0
+repetitionMin = 0.0
 
 syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
 #syncMin = 0.0
@@ -328,11 +338,13 @@ syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
 densityMax = 24.0
 densityMin = 4.0
 
-SyncScore = (SyncScore / 2.0 * syncMax) #scale to min and max reasonable feature values.
-DensityScore = (DensityScore / 2.0 * (densityMax-densityMin)) + 4.0
-featureScores = list([SyncScore, DensityScore, DistanceScore])
+SyncScore = (SyncInput / 2.0 * syncMax) #scale to min and max reasonable feature values.
+DensityScore = (DensityInput / 2.0 * (densityMax-densityMin)) + 4.0
+RepetitionScore = RepetitionInput / 2.0
+featureScores = list([SyncScore, DensityScore, RepetitionScore])
 dqnAgent = DQN(LSTM, seedLoop, featureScores)
 donethreshold = 0.9
+
 for trial in range(trials):
     # reset environment
     print("Trial {} \n".format(trial))
@@ -345,13 +357,13 @@ for trial in range(trials):
         # action shape = 16,32 size
         dqnAgent.remember(currentState, action, reward, newState, done)
 
-        dqnAgent.replay()  # internally iterates default (prediction) model
         dqnAgent.target_train()  # iterates target model
 
         currentState = np.copy(newState)
         if done == 1:
             print("Seed Loop", convertOneHotToList(seedLoop))
             print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
+            print('Syncopation ', SyncInput, 'Density ', DensityInput)
             print("DQN  Loop", convertOneHotToList(newState[0,:,:]))
             break
     if step >= 9:
