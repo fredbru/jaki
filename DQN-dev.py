@@ -14,7 +14,7 @@ from collections import deque
 np.set_printoptions(threshold=np.inf,precision=2)
 
 class DQN:
-    def __init__(self, LSTM, seedLoop, featureScores):
+    def __init__(self, LSTM, seedLoop, featureTargets, featureCount):
         # Initialize Deep-Q reinforcement learning model. Consists of 2 networks of same architecture- Q-network to
         # choose next action and Target-Q to estimate expected future return.
 
@@ -37,7 +37,8 @@ class DQN:
             self.mostLikely[i,index] = 1.0
         self.model = self.create_model()
         self.targetModel = self.create_model()
-        self.syncTarget, self.densityTarget, self.repetitionTarget = featureScores
+        self.syncTarget, self.densityTarget, self.repetitionTarget = featureTargets
+        self.featureCount = featureCount
 
 
     def create_model(self):
@@ -78,42 +79,50 @@ class DQN:
         newState[0,actionIndex[0],:] = 0
         newState[0,actionIndex[0],actionIndex[1]] = 1
 
+        print("jaki ", convertOneHotToList(newState[0,:,:]))
+        print("seed ", convertOneHotToList(self.seedLoop))
+        print("lstm ", convertOneHotToList(self.mostLikely))
+
         reward = self.getReward(state,newState)
-        #print(reward)
 
         if reward > donethreshold:
-            print("Done!!! \n \n ")
+            print("Done! \n \n ")
             done = 1
         print(donethreshold, trial)
         return newState, reward, done, action
 
     def getReward(self, state, newState):
-        # Calculate reward as sum of complexity increase (syncopation+density) and similarity to probabilities.
-        # todo: optimize weights, find a better way to combine features.
+        # Calculate reward using closeness to target feature values and similarity to probabilities.
 
-        syncopation = self.calculateCombinedMonoSyncopation(newState[0,:,:])
-        syncopationReward = ((12.0-abs(self.syncTarget - syncopation)) /12.0) # difference between target sync and actual sync
-        #todo: needs to be 1/ the difference! or inverse - so smaller the difference, bigger reward. atm bigger reward = bigger difference.
+        if self.syncTarget != None:
+            syncopation = self.calculateCombinedMonoSyncopation(newState[0,:,:])
+            syncopationReward = ((12.0-abs(self.syncTarget - syncopation)) /12.0) # difference between target sync and actual sync
+            print("s s", syncopation, self.syncTarget)
+        else:
+            syncopationReward = 0.0
+
+        if self.densityTarget != None:
+            density = self.calculateOverallDensity(newState[0, :, :])
+            densityReward = ((24.0 - abs(self.densityTarget - density)) / 24.0)
+            print("d s", density, self.densityTarget)
+        else:
+            densityReward = 0.0
+
+        if self.repetitionTarget != None:
+            repetition = self.calculateSymmetry(newState[0, :, :])
+            repetitionReward = 1.0 - abs(self.repetitionTarget - repetition)
+            print("r s", repetition, self.repetitionTarget)
+        else:
+            repetitionReward = 0.0
+
         LSTMDistancePenalty = (np.sum(np.abs(newState[0,:,:] - self.probabilities)) /40.0)
-        #seedDistance = (np.sum(np.abs(newState[0,:,:] - self.seedLoop)) /4.0) +1.0
         LSTMDistanceReward = np.sqrt(np.sqrt(1-LSTMDistancePenalty))
-        print("jaki ", convertOneHotToList(newState[0,:,:]))
-        print("seed ", convertOneHotToList(self.seedLoop))
-        print("lstm ", convertOneHotToList(self.mostLikely))
-        density =  self.calculateOverallDensity(newState[0,:,:])
-        densityReward = ((24.0-abs(self.densityTarget - density)) /24.0)
-
-        repetition = self.calculateSymmetry(newState[0,:,:])
-        repetitionReward = 1.0 - abs(self.repetitionTarget - repetition)
 
 
-        print("d s",density, self.densityTarget)
-        print("s s",syncopation, self.syncTarget)
-        print("r s", repetition, self.repetitionTarget)
-        # todo: change density reward to fixed number - not difference?
 
-        reward = (syncopationReward + densityReward + LSTMDistanceReward + repetitionReward)/ 4.0
-        #print(syncopationReward, -distancePenalty, densityReward)
+        reward = (syncopationReward + densityReward + LSTMDistanceReward + repetitionReward)/ self.featureCount
+
+
         print('reward', reward,'syncopation reward', syncopationReward,'LSTM reward', LSTMDistanceReward,
               'density reward', densityReward, 'repetition reward', repetitionReward)
         return reward
@@ -320,29 +329,45 @@ LSTMmostLikely = np.zeros([16, 32])
 for i in range(probabilities.shape[0]):
     index = np.argmax(probabilities[i, :])
     LSTMmostLikely[i, index] = 1.0 # = input to model, LSTM prediction
-
+print('Input Feature Scores (0 = Low, 1 = Mid, 2 = High, None = Ignore Feature)')
 print("Syncopation Value (0-2):")
-SyncInput = int(input())
+SyncInput = input()
 print("Density Value (0-2):")
-DensityInput = int(input())
+DensityInput = input()
 print("Repetition Value (0-2):")
-RepetitionInput = int(input())
-DistanceScore = 0
+RepetitionInput = input()
+
+
 
 repetitionMax = 1.0
 repetitionMin = 0.0
 
 syncMax = 12.0 # theoretical max = 13.0 for one line, x5 = 65.0
 #syncMin = 0.0
+featureCount = 1
+if SyncInput.isdigit():
+    SyncTarget = (int(SyncInput) / 2.0 * syncMax)  # scale to min and max reasonable feature values.
+    featureCount+=1
+else:
+    SyncTarget = None
 
 densityMax = 24.0
 densityMin = 4.0
+if DensityInput.isdigit():
+    DensityTarget = (int(DensityInput) / 2.0 * (densityMax-densityMin)) + 4.0
+    featureCount+=1
+else:
+    DensityTarget = None
 
-SyncScore = (SyncInput / 2.0 * syncMax) #scale to min and max reasonable feature values.
-DensityScore = (DensityInput / 2.0 * (densityMax-densityMin)) + 4.0
-RepetitionScore = RepetitionInput / 2.0
-featureScores = list([SyncScore, DensityScore, RepetitionScore])
-dqnAgent = DQN(LSTM, seedLoop, featureScores)
+if RepetitionInput.isdigit():
+    RepetitionTarget = int(RepetitionInput) / 2.0
+    featureCount+=1
+else:
+    RepetitionTarget = None
+
+featureTargets = list([SyncTarget, DensityTarget, RepetitionTarget])
+print(featureTargets)
+dqnAgent = DQN(LSTM, seedLoop, featureTargets, featureCount)
 donethreshold = 0.9
 
 for trial in range(trials):
@@ -363,7 +388,7 @@ for trial in range(trials):
         if done == 1:
             print("Seed Loop", convertOneHotToList(seedLoop))
             print("LSTM Loop", convertOneHotToList(LSTM.predict(np.expand_dims(seedLoop, 0))[0]))
-            print('Syncopation ', SyncInput, 'Density ', DensityInput)
+            print('Syncopation ', SyncInput, 'Density ', DensityInput, 'Repetition ', RepetitionInput)
             print("DQN  Loop", convertOneHotToList(newState[0,:,:]))
             break
     if step >= 9:
