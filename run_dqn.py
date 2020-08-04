@@ -8,7 +8,7 @@ from keras.optimizers import Adam
 import random
 import time
 from scipy.signal import find_peaks
-import WriteLoopToMIDI
+import MIDI
 
 from collections import deque
 
@@ -33,12 +33,12 @@ class DQN:
         self.mostLikely = mostLikely
         print("LSTM = ", convertOneHotToList(self.LSTMprobabilities))
         print("Seed = ", convertOneHotToList(self.seedPattern))
-        self.model = self.create_model()
-        self.targetModel = self.create_model()
-        self.syncTarget, self.densityTarget, self.repetitionTarget = featureTargets
+        self.model = self.createModel()
+        self.targetModel = self.createModel()
+        self.syncTarget, self.cymbalDensityTarget, self.drumDensityTarget, self.repetitionTarget = featureTargets
         self.featureCount = featureCount
 
-    def create_model(self):
+    def createModel(self):
         # Create model (for DQN and target-Q). Set inital weights to LSTM output, so learning starts from pattern
         # predicted by LSTM.
 
@@ -97,12 +97,19 @@ class DQN:
         else:
             syncopationReward = 0.0
 
-        if self.densityTarget != None:
-            density = self.calculateOverallDensity(newState[0, :, :])
-            densityReward = ((24.0 - abs(self.densityTarget - density)) / 24.0)
-            print("d s", density, self.densityTarget)
+        if self.cymbalDensityTarget != None:
+            cymbalDensity = self.countAllCymbals(newState[0, :, :])
+            cymbalDensityReward = ((12.0 - abs(self.cymbalDensityTarget - cymbalDensity)) / 12.0)
+            print("cd s", cymbalDensity, self.cymbalDensityTarget)
         else:
-            densityReward = 0.0
+            cymbalDensityReward = 0.0
+
+        if self.drumDensityTarget != None:
+            drumDensity = self.countAllDrums(newState[0, :, :])
+            drumDensityReward = ((12.0 - abs(self.drumDensityTarget - drumDensity)) / 12.0)
+            print("d s", drumDensity, self.drumDensityTarget)
+        else:
+            drumDensityReward = 0.0
 
         if self.repetitionTarget != None:
             repetition = self.calculateRepetition(newState[0, :, :])
@@ -114,9 +121,9 @@ class DQN:
         LSTMDistancePenalty = (np.sum(np.abs(newState[0,:,:] - self.LSTMprobabilities)) /40.0)
         LSTMDistanceReward = np.sqrt(np.sqrt(1-LSTMDistancePenalty))
 
-        reward = (syncopationReward + densityReward + LSTMDistanceReward + repetitionReward)/ self.featureCount
-        print('Reward: ', reward,'Syncopation reward: ', syncopationReward,'LSTM reward: ', LSTMDistanceReward,
-              'Density reward: ', densityReward, 'Repetition reward: ', repetitionReward)
+        reward = (syncopationReward + cymbalDensityReward + drumDensityReward + LSTMDistanceReward + repetitionReward)/ self.featureCount
+        print('Reward: ', reward,'| Syncopation reward: ', syncopationReward,'| LSTM reward: ', LSTMDistanceReward,
+              '| Cymbal Density reward: ', cymbalDensityReward, '| Drum Density Reward: ', drumDensityReward, '| Repetition reward: ', repetitionReward)
         return reward
 
     def getRandomAction(self):
@@ -162,38 +169,42 @@ class DQN:
                 density+=5
         return density
 
-    def calculateKickDensity(self, pattern):
+    def countKicks(self, pattern):
         # Count number of kicks vs length of bar
         kickDensity = np.sum([pattern[:,4],pattern[:,5],pattern[:,6],pattern[:,7],pattern[:,8],
                               pattern[:, 9],pattern[:,10],pattern[:,11],pattern[:,12],pattern[:,13],
                               pattern[:, 14],pattern[:,15],pattern[:,16],pattern[:,17],pattern[:,18],
-                              pattern[:,19]]) / 16.0
+                              pattern[:,19]])
         return kickDensity
 
-    def calculateSnareDensity(self, pattern):
+    def countSnares(self, pattern):
         # Count number of snares vs length of bar
         snareDensity = np.sum([pattern[:,11],pattern[:,12],pattern[:,13],pattern[:,14],pattern[:,15],
                               pattern[:, 16],pattern[:,17],pattern[:,18],pattern[:,23],pattern[:,24],
                               pattern[:, 25],pattern[:,26],pattern[:,27],pattern[:,28],pattern[:,29],
-                              pattern[:,30]]) / 16.0
+                              pattern[:,30]])
         return snareDensity
 
-    def calculateCymbalDensity(self, pattern):
+    def countToms(self, pattern):
+        # Calculate number of tom hits in pattern vs length of bar
+        tomDensity = np.sum([pattern[:,2],pattern[:,3],pattern[:,7],pattern[:,8],pattern[:,10],
+                              pattern[:,14],pattern[:,15],pattern[:,17],pattern[:,18],pattern[:,19],
+                              pattern[:,21],pattern[:,26],pattern[:,27],pattern[:,29],pattern[:,30],
+                              pattern[:,31]])
+        return tomDensity
+
+    def countAllDrums(self, pattern):
+        drumDensity = self.countKicks(pattern) + self.countSnares(pattern) + self.countToms(pattern)
+        return drumDensity
+
+    def countAllCymbals(self, pattern):
         # Count number of cymbal hits (closed or open) in pattern vs length of bar
         cymbalDensity = np.sum([pattern[:,0],pattern[:,1],pattern[:,2],pattern[:,3],pattern[:,5],
                               pattern[:, 6],pattern[:,7],pattern[:,8],pattern[:,9],pattern[:,10],
                               pattern[:, 12],pattern[:,13],pattern[:,14],pattern[:,15],pattern[:,16],
                               pattern[:,17], pattern[:, 20], pattern[:,21], pattern[:, 24], pattern[:,25],
-                              pattern[:,27],pattern[:,28],pattern[:,29]]) / 16.0
+                              pattern[:,27],pattern[:,28],pattern[:,29]])
         return cymbalDensity
-
-    def calculateTomDensity(self, pattern):
-        # Calculate number of tom hits in pattern vs length of bar
-        tomDensity = np.sum([pattern[:,2],pattern[:,3],pattern[:,7],pattern[:,8],pattern[:,10],
-                              pattern[:,14],pattern[:,15],pattern[:,17],pattern[:,18],pattern[:,19],
-                              pattern[:,21],pattern[:,26],pattern[:,27],pattern[:,29],pattern[:,30],
-                              pattern[:,31]]) / 16.0
-        return tomDensity
 
     def calculateCombinedMonoSyncopation(self, state):
         # Calculate syncopation for 1 bar pattern using Longuet-Higgins monophonic syncopation model
@@ -262,14 +273,14 @@ class DQN:
 
         self.model.fit(currentStates, target, epochs=1, verbose=0)
 
-    def target_train(self):
+    def targetTrain(self):
         # Train target-Q network
 
         weights = self.model.get_weights()
-        target_weights = self.targetModel.get_weights()
-        for i in range(len(target_weights)):
-            target_weights[i] = weights[i] * self.tau + target_weights[i] * (1 - self.tau)
-        self.targetModel.set_weights(target_weights)
+        targetWeights = self.targetModel.get_weights()
+        for i in range(len(targetWeights)):
+            targetWeights[i] = weights[i] * self.tau + targetWeights[i] * (1 - self.tau)
+        self.targetModel.set_weights(targetWeights)
 
     def save_model(self, fn):
         self.model.save(fn)
@@ -292,10 +303,12 @@ def parseCommandLineInput():
     # the average of all when calculating rewards in DQN.
 
     print('Input Feature Scores (0 = Low, 1 = Mid, 2 = High, None = Ignore Feature)')
+    print("Cymbal Density Value (0-2):")
+    CymbalDensityInput = input()
+    print("Drum Density Value (0-2)")
+    DrumDensityInput = input()
     print("Syncopation Value (0-2):")
     SyncInput = input()
-    print("Density Value (0-2):")
-    DensityInput = input()
     print("Repetition Value (0-2):")
     RepetitionInput = input()
 
@@ -311,22 +324,29 @@ def parseCommandLineInput():
     else:
         SyncTarget = None
 
-    densityMax = 24.0
-    densityMin = 4.0
-    if DensityInput.isdigit():
-        DensityTarget = (int(DensityInput) / 2.0 * (densityMax-densityMin)) + 4.0
+    densityMax = 12.0
+    densityMin = 2.0
+    if CymbalDensityInput.isdigit():
+        CymbalDensityTarget = (int(CymbalDensityInput) / 2.0 * (densityMax-densityMin)) + 2.0
         featureCount+=1
     else:
-        DensityTarget = None
+        CymbalDensityTarget = None
+
+    if DrumDensityInput.isdigit():
+        DrumDensityTarget = (int(DrumDensityInput) / 2.0 * (densityMax - densityMin)) + 2.0
+        featureCount += 1
+    else:
+        DrumDensityTarget = None
 
     if RepetitionInput.isdigit():
         RepetitionTarget = int(RepetitionInput) / 2.0
         featureCount+=1
     else:
         RepetitionTarget = None
-    featureTargets = list([SyncTarget, DensityTarget, RepetitionTarget])
 
-    inputs = list([SyncInput, DensityInput, RepetitionInput])
+    featureTargets = list([SyncTarget, CymbalDensityTarget, DrumDensityTarget, RepetitionTarget])
+
+    inputs = list([SyncInput, CymbalDensityInput, DrumDensityInput, RepetitionInput])
     return featureTargets, featureCount, inputs
 
 def predictFromLSTM(LSTM, seedPattern):
@@ -342,17 +362,17 @@ def predictFromLSTM(LSTM, seedPattern):
 
 featureTargets, featureCount, inputs = parseCommandLineInput()
 
-oneHotGrooves = np.load("One-Hot-Drum-Loops.npy")
+oneHotGrooves = np.load("one_hot_drum_loops.npy")
 oneBarGrooves = oneHotGrooves[:,0:16,:]
 #seedPattern = oneBarGrooves[np.random.randint(0,oneHotGrooves.shape[0]),:,:]
-seedPattern = oneBarGrooves[5039,:,:]
+seedPattern = oneBarGrooves[4039,:,:]
 
 LSTM = load_model("JAKI_Encoder_Decoder_20-7_1")
 LSTMprobabilities, LSTMmostLikely = predictFromLSTM(LSTM, seedPattern)
 dqnAgent = DQN(LSTMmostLikely, LSTMprobabilities, seedPattern, featureTargets, featureCount)
 
 trials = 1000
-trial_len = 50
+trialLength= 50
 steps = []
 donethreshold = 0.95
 for trial in range(trials):
@@ -361,11 +381,11 @@ for trial in range(trials):
     if trial % 20 == 0:
         donethreshold -= 0.02
 
-    for step in range(trial_len):
+    for step in range(trialLength):
         newState, reward, done, action = dqnAgent.act(currentState, donethreshold) #todo: do the action
         # action shape = 16,32 size
         dqnAgent.remember(currentState, action, reward, newState, done)
-        dqnAgent.target_train()  # iterates target model
+        dqnAgent.targetTrain()  # iterates target model
 
         currentState = np.copy(newState)
         if done == 1:
@@ -380,7 +400,7 @@ for trial in range(trials):
         print("Completed in {} trials".format(trial))
         break
 
-WriteLoopToMIDI.write_MIDI(('pattern5_DQN_''S' + inputs[0] + '_D' + inputs[1] + '_R' + inputs[2] +'.mid'),
+MIDI.write_MIDI(('Pattern6_DQN_''CD' + inputs[1] + '_DD' + inputs[2] + '_S' + inputs[0] + '_R' + inputs[3] +'.mid'),
                            convertOneHotToList(newState[0,:,:]))
-WriteLoopToMIDI.write_MIDI(('pattern5_LSTM.mid'), convertOneHotToList(LSTMprobabilities))
-WriteLoopToMIDI.write_MIDI(('pattern5_Seed.mid'), convertOneHotToList(seedPattern))
+MIDI.write_MIDI(('Pattern6_LSTM.mid'), convertOneHotToList(LSTMprobabilities))
+MIDI.write_MIDI(('Pattern6_Seed.mid'), convertOneHotToList(seedPattern))
