@@ -14,9 +14,7 @@ As further work we will be incorporating more musical features and looking at ne
 
 This repository contains scripts for generating example patterns using the deep reinforcement learning algorithm, with a pre-trained model. It also contains functions for building your own training dataset from BFD format Groove files, and training the LSTM yourself, though this is not required for standard use.
 
-# Usage
-
-Files:
+# Files
 
 run-dqn.py:
 Main file for running jaki, containing Double Deep-Q learning algorithm for the tuner part. when run from terminal, takes an input for each of the four features. For each, type 0,1 or 2 for low medium or high, or just leave blank (press enter) to skip that feature and not consider it. The tuner will then run for a random seed pattern from the training data (MIDI input support to be implemented soon). Loads the pre-trained model for the LSTM. As it runs, prints current state of the pattern with rewards, seed pattern and LSTM generated pattern so you can keep track of it as it learns. Upon completion prints the final pattern in the terminal and saves the seed, LSTM generated loop and final DQN generated loop to seperate MIDI files.
