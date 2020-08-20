@@ -12,4 +12,6 @@ As of 20-6-20 the system currently works in a basic sense, but significant hyper
 
 As further work I hope to look at the incorporation of more musical features to be used in the reward function, with adaptable weightings, aiming towards and interactive drum loop variation generator with higher-level musical controls. As part of developing the reinforcement learning aspect of jaki, I hope to look at more developed ways of integrating multiple reward functions and action selection, such as option-based frameworks and deep hierarchical reinforcement learning.
 
+A selection of examples with audio and MIDI rendering may be found at:
+
 https://www.dropbox.com/sh/clo9gux5y5w8b3j/AACzp6GfGyFacWvSNq_-8PNNa?dl=0
