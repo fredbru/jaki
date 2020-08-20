@@ -11,3 +11,5 @@ To connect to the LSTM, the DQN reward function is calculated based on closeness
 As of 20-6-20 the system currently works in a basic sense, but significant hyperparameter tuning is required. The LSTM model is mostly complete, but the DQN requires work, and a better look at the reward calculation in particular. Other than that more work is needed to build in a proper way to input MIDI files for generation for actual use-cases, instead of just random selection of loops from .npy dataset.
 
 As further work I hope to look at the incorporation of more musical features to be used in the reward function, with adaptable weightings, aiming towards and interactive drum loop variation generator with higher-level musical controls. As part of developing the reinforcement learning aspect of jaki, I hope to look at more developed ways of integrating multiple reward functions and action selection, such as option-based frameworks and deep hierarchical reinforcement learning.
+
+https://www.dropbox.com/sh/clo9gux5y5w8b3j/AACzp6GfGyFacWvSNq_-8PNNa?dl=0
