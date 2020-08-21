@@ -1,10 +1,10 @@
 # jaki
 
-jaki is and automatic drum pattern generation system, built to generate controlled, musical variations on 1 bar 5-part drum patterns (kick, snare, hihat, crash, tom).
+jaki is and automatic drum pattern generation system, built to generate controlled, musical continuations of 1 bar 5-part drum patterns (kick, snare, hihat, crash, tom).
 
-The first part of the system uses a LSTM Encoder-Decoder architecture to learn to generate 1 bar patterns based on a 1 bar seed pattern. The system is fed with a dataset of 2 bar patterns, and learns to predict the second bar from the first bar, thus generating continuations of a 1 bar pattern that are idiomatic. This architecture is inspired by the RL Tuner algorithm developed by Magenta for melody generation.
+The first part of the system uses a LSTM Encoder-Decoder architecture to learn to generate 1 bar patterns based on a 1 bar seed pattern. The system is fed with a dataset of 2 bar patterns, and learns to predict the second bar from the first bar, thus generating continuations of a 1 bar pattern that are stylistically accurate. 
 
-The output of the LSTM can often be either musically uninteresting, or sometimes flawed in the case of atypical seed patterns. A common problem is excessive repetition of certain hits, and a general lack of complexity in the generated pattern. The second part of jaki therefore uses a Deep-Q reinforcement learning architecture to 'tune' the output of the LSTM to more musically interesting patterns according to four musical features controlled by the user.
+The output of the LSTM can often be either musically uninteresting, or sometimes flawed in the case of atypical seed patterns. A common problem is excessive repetition of certain hits, and a general lack of complexity in the generated pattern. The second part of jaki therefore uses a Deep-Q reinforcement learning architecture to 'tune' the output of the LSTM to more musically interesting patterns according to four musical features controlled by the user. This architecture is inspired by the RL Tuner algorithm developed by Magenta for melody generation. https://magenta.tensorflow.org/2016/11/09/tuning-recurrent-networks-with-reinforcement-learning
 
 The four musical features (taken from the GrooveToolbox https://github.com/fredbru/GrooveToolbox) are cymbal density, drum density, syncopation and repetition (aka symmetry). When running the code, the user can set the target score of each of these four features to low, medium or high (0,1,2). Any combination of the four features may be used. The reward is calculated based on the closeness of feature scores of the generated pattern to the target scores. Thus jaki attempts to generate patterns that fit the qualities desired by the user.
 
