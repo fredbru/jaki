@@ -38,3 +38,6 @@ Generate seperate .npy files for relevant data in BFD3 format Groove files. Use 
 
 create_training_data.py:
 Make a dataset in same numpy format of one_hot_drum_loops.npy from a folder of individual numpy files using functions in GrooveToolbox. Use this only if you would like to build your own training dataset for the LSTM from a library.
+
+
+For any questions, please feel free to get in touch at fred.bruford@gmail.com
