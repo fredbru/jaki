@@ -12,6 +12,9 @@ The reward function also incorporates a similarity function calculated against t
 
 As further work we will be incorporating more musical features and looking at new methods of integrating multiple reward functions and action selection, such as option-based frameworks and deep hierarchical reinforcement learning.
 
+A selection of examples with audio and MIDI rendering may be found at:
+https://www.dropbox.com/sh/clo9gux5y5w8b3j/AACzp6GfGyFacWvSNq_-8PNNa?dl=0
+
 This repository contains scripts for generating example patterns using the deep reinforcement learning algorithm, with a pre-trained model. It also contains functions for building your own training dataset from BFD format Groove files, and training the LSTM yourself, though this is not required for standard use.
 
 # Files
@@ -35,7 +38,3 @@ Generate seperate .npy files for relevant data in BFD3 format Groove files. Use 
 
 create_training_data.py:
 Make a dataset in same numpy format of one_hot_drum_loops.npy from a folder of individual numpy files using functions in GrooveToolbox. Use this only if you would like to build your own training dataset for the LSTM from a library.
-
-
-A selection of examples with audio and MIDI rendering may be found at:
-https://www.dropbox.com/sh/clo9gux5y5w8b3j/AACzp6GfGyFacWvSNq_-8PNNa?dl=0
