@@ -1,7 +1,7 @@
 # jaki
 https://zenodo.org/record/4285414#.YBgUydzLdPY
 
-jaki is and automatic drum pattern generation system, built to generate controlled, musical continuations of 1 bar 5-part drum patterns (kick, snare, hihat, crash, tom).
+jaki is an automatic drum pattern generation system, built to generate controlled, musical continuations of 1 bar 5-part drum patterns (kick, snare, hihat, crash, tom).
 
 The first part of the system uses a LSTM Encoder-Decoder architecture to learn to generate 1 bar patterns based on a 1 bar seed pattern. The system is fed with a dataset of 2 bar patterns, and learns to predict the second bar from the first bar, thus generating continuations of a 1 bar pattern that are stylistically accurate. 
 
