@@ -1,4 +1,5 @@
 # jaki
+https://zenodo.org/record/4285414#.YBgUydzLdPY
 
 jaki is and automatic drum pattern generation system, built to generate controlled, musical continuations of 1 bar 5-part drum patterns (kick, snare, hihat, crash, tom).
 
