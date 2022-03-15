@@ -1,11 +1,6 @@
 # UNFINISHED. Generate drum loop variations from just LSTM and write to MIDI files.
 
 import numpy as np
-from tensorflow.keras.models import load_model
-import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
 import pretty_midi
 
 def convertOneHotToList(groove):

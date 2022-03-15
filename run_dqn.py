@@ -1,13 +1,9 @@
 import numpy as np
-import random
 from tensorflow.keras.models import load_model
-import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.optimizers import Adam
 import random
-import time
-from scipy.signal import find_peaks
 import MIDI
 
 from collections import deque
